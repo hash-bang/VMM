@@ -1,0 +1,218 @@
+NAME
+    vmm - Handy tool to manage VMware virtual machines
+
+SYNOPSIS
+            vmm <command> [options]
+
+    Global syntax:
+                vmm <command> [-f] [-v+] [-w seconds] [@profile]
+
+    Command specific syntax:
+                vmm list [vms|datastores|hosts|pool] [patterns...]
+                vmm migrate [-p low|normal|high] [-o pool] <vms...> <host>
+                vmm move [-o pool] <vms...> <datastore>
+                vmm setpool <low|normal|high> <cpu|mem|all> <pools...>
+                vmm show [vms...]
+                vmm state <on|off|reboot|shutdown|restart> <vms...>
+
+    Not yet implemented:
+                vmm clone [-c count] [-m max increment] [-d datastore...] <source vm> <target vm>
+                vmm df [datastore...]
+                vmm logs <vms...>
+                vmm host [maintenance|restore|restart|shutdown] <hosts...>
+                vmm snapshot [-s name] <vms...>
+                vmm version
+
+COMMANDS
+    clone   Clone a given VM to another VM name. If -c is specified multiple
+            copies are made. Each VM name will be incremented in the usual
+            Perlish way. e.g.: DB1, DB2, DB3 etc. Specify -m to specify at
+            what point vmm should give up trying.
+
+            If -d is unspcified the datastore of the source VM is copied as
+            the new clones datastore. If -d is specified the data store will
+            be set during cloning. If -d contains a comma denoted list the
+            datastores will be alternated during cloning. e.g. -d 1,2 copies
+            to datastore 1 then 2 then starts again at 1.
+
+    df      Display disk usage information about datastores. If a list of
+            matches is provided, the data store list is filtered for those
+            items.
+
+    list    Display a list of the given items matching a pattern.
+
+            Possible lists include (selection can be plural or singular): *
+            vms (default if unspecified) * datastores * hosts * pools
+
+    migrate Migrate a given list of VMs to another host.
+
+    move    Move a given list of VMs to another datastore.
+
+    setpool Set the share level on the given resource pools.
+
+    show    Show information about a given list of VMs. If no specific
+            matching pattern is specified all VMs are listed.
+
+    state   Set the state of a list of VMs.
+
+            This can be any of the following choices: * on - Power up the
+            specified VMs * off - Power down the specified VMs. This is a
+            hard power state so data loss could occur. * restart - Hard
+            power cycle the VMs. Like 'off' this is a forced power state so
+            data loss could occur. * shutdown - Try shutting down the
+            machine via VMware tools * reboot - Try shutting down the
+            machine via VMware tools
+
+OPTIONS
+    [@profile]
+
+            Used during: All operations
+            Default: First specified profile in config
+            Type: Profile name
+
+            Specifies which profile to use when addressing the vServer. e.g.
+            vmm version @cluster1 OR vmm version @cluster2
+
+            Switches between the two profiles setup in the VMM config file
+
+    -c
+
+            Used during: migrate
+            Default: 1
+            Type: Number
+
+            Specifies how many VMs should be created during a clone
+            operation. If more than one the target VM name is incremented a
+            maximum number of times specified by the -m flag. The name of
+            the target VM is incremented in the usual Perlish way. e.g.
+
+            DBS1, DBS2, DBS3... DBS10 DB00, DB01, DB02... DB99 DBAA, DBAB,
+            DBAC,,, DBZZ
+
+    -d [datastore]
+
+            Used during: migrate
+            Default: Same as source VM
+            Type: Datastore name
+
+            Specify a data store for operations that require it.
+
+    -f
+
+            Used during: All operations
+            Default: off
+            Type: Switch
+
+            Force continue if an error occurs. Normaly if an error occurs
+            vmm will stop processing any further VMs specified on the
+            command line. If this flag is enabled vmm will instead continue
+            operation as if no error occured.
+
+    -m
+
+            Used during: clone
+            Default: 99
+            Type: Number
+
+            Specify the maximum number of incremental names to try before
+            giving up. When using the -c flag during a migrate operation vmm
+            trys to find a free target VM name by incrementing the default
+            name given by the user (see -c). This flag specifies how many
+            attempts vmm should make before giving up attempting to find a
+            free slot.
+
+    -n
+    --dryrun
+
+            Used during: All operations
+            Default: off
+            Type: Switch
+
+            Dry run mode. When enabled vmm will continue as normal but no
+            actual call to the VMware VServer is made.
+
+    --pool [pool]
+    -o [pool]
+
+            Used during: clone, migrate, move
+            Default: Same as the source VM
+            Type: Pool name
+
+            Specifies the alternate pool name to use when migrating or
+            cloning machines. If unspecified the source VM's pool is used
+            instead.
+
+    --priority [priority]
+    -p [priority]
+
+            Used during: migrate
+            Default: low
+            Type: Choice of: low, normal, high
+
+            Specifies the priority when migrating VMs.
+
+    -v
+    --verbose
+
+            Used during: All operations
+            Default: 0
+            Type: Accumulating switch
+
+            Be more verbose when outputting information to STDERR. Specify
+            multiple times to increase verbosity.
+
+    -w [seconds]
+    -wait [seconds]
+
+            Used during: clone, migrate, setpool, state
+            Default: 0
+            Type: Number of seconds
+
+            Force a wait for the specified number of seconds between VM
+            operations.
+
+DESCRIPTION
+    A command line tool for the manipulation of VMware Virtual Machines
+    (VM).
+
+EXAMPLES
+    vmm migrate DBS* Carl
+        Migrate all virtual machines matching 'DBS*' to the 'Carl' host.
+
+    vmm migrate DBS* Lenny -w 60 -o Active -p high
+        Migrate all virtual machines matching 'DBS*' with high priority to
+        the 'Active' pool on the 'Lenny' host waiting 60 seconds between
+        machine.
+
+    vmm clone VM01 VM02
+        Clone VM01 to VM02. Since neither the datasource (-d) or pool (-o)
+        is specified these details are copied from VM01.
+
+    vmm clone DB00 DB01 -c 30
+        Clone DB01 to DB02 creating 30 copies. This will actually make the
+        machines DB01 to DB30. Since neither the datasource (-d) or pool
+        (-o) is specified these details are copied from VM01.
+
+    vmm clone DB00 DB01 -c 30 -d SAN1,SAN2 -o Active
+        Same as the above example but spread the datastores across SAN1 and
+        SAN2 and move the machine to the 'Active' pool.
+
+    vmm move DB00 DB01 SAN2 @cluster2
+        Move VMs DB00 and DB01 to the SAN2 datastore within profile
+        'cluster2'.
+
+    vmm state on DB00 DB01 -w 30
+        Turn DB00 and DB01 on waiting 30 seconds between machines.
+
+FILES
+    /etc/vmmrc
+            VMM config file for all users.
+
+    .vmmrc  VMM config file for the local user.
+
+BUGS
+    Quite probably. Please report to the author when found.
+
+AUTHOR
+    Matt Carter <m@ttcarter.com>
+
