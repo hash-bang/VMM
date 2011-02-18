@@ -348,6 +348,67 @@ VMM config file for the local user.
 
 =back
 
+=head1 CONFIG
+
+The /etc/vmmrc and .vmmrc files will be processed to determine VMM's configuration, the latter file taking precedence.
+
+The layout of the config file spcifies which profiles to use.
+
+	[GLOBAL]
+	rewrite host = s/^(.+?)\./\1/
+	verbose = 2
+	profile = Cluster1
+	dryrun = 0
+	
+	[Cluster1]
+	url = https://cluster1.acme.edu
+	username = admin
+	password = password
+	
+	[Cluster2]
+	url = https://cluster2.acme.edu.au
+	username = administrator
+	password = changeme
+
+=over 8
+
+=item B<[GLOBAL]>
+
+The meta global section. Any option specified here will be automatically carried into each profiles config.
+
+In the main example Cluster1 will have a 'verbose' option of 2. Cluster2 will have a 'verbose' option of 1 since it overrides the global setting.
+
+=item B<[profile]>
+
+The name (case-insensitive) of the profile to define.
+
+=item B<url>
+
+The connection URL of the vServer system within the profile
+
+=item B<username> and B<password>
+
+The authentication information when connecting to the vServer.
+
+=item B<dryrun>
+
+Specify a default dry run value. See B<-n> for further information.
+
+=item B<profile>
+
+Specify the default profile to use if none is explicitally set. If not specified the first found profile in the config file is used.
+
+=item B<rewrite host>
+
+Specify a substitution regular expression to use when correcting host names.
+The value given in the above example will remove any trailing DNS name correcting 'host1.a.very.long.dns.com' to 'host1'.
+
+=item B<verbose>
+
+Specify a default verbosity level. See B<-v> for further information.
+
+=back
+
 =head1 BUGS
 
 Quite probably. Please report to the author when found.
@@ -504,9 +565,18 @@ GetOptions(
 );
 
 # Config loading {{{
+my $cfgfile;
+if (-e "/etc/vmmrc") {
+	$cfgfile = "/etc/vmmrc";
+} elsif (-e "$ENV{HOME}/.vmmrc") {
+	$cfgfile = "$ENV{HOME}/.vmmrc";
+} else {
+	fatal("No VMMRC file could be found at either /etc/vmmrc or \$HOME/.vmmrc");
+}
+
 my $profile; # The active profile to use
 my $cfg = Config::IniFiles->new(
-	-file => "/home/mc/.vmmrc", # FIXME
+	-file => $cfgfile,
 	-default => 'global',
 	-fallback => 'global',
 	-nocase => 1,
