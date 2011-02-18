@@ -24,7 +24,7 @@ vmm - Handy tool to manage VMware virtual machines
 
 =item B<Not yet implemented:>
 
-	vmm clone [-c count] [-m max increment] [-d datastore...] <source vm> <target vm>
+	vmm clone [-c count] [-m max] [-d datastore...] <source vm> <target vm>
 	vmm df [datastore...]
 	vmm logs <vms...>
 	vmm host [maintenance|restore|restart|shutdown] <hosts...>
@@ -359,8 +359,6 @@ Matt Carter <m@ttcarter.com>
 =cut
 
 
-
-
 use Config::IniFiles;
 use IO::Handle;
 use Getopt::Long;
@@ -370,13 +368,7 @@ Getopt::Long::Configure("bundling", "ignorecase_always");
 STDERR->autoflush(1); # } Flush the output DIRECTLY to the output buffer without caching
 STDOUT->autoflush(1); # }
 
-# FIXME: Debugging modules
-use Data::Dumper;
-
-# FIXME: Import these utils into this file
-use lib '/home/mc/Desktop/VMWare/vmware-vsphere-cli-distrib/apps';
-use AppUtil::HostUtil;
-use AppUtil::VMUtil;
+use Data::Dumper; # FIXME: Debugging modules
 
 sub fatal {
 	# Print an error message and fatally die
@@ -394,19 +386,19 @@ sub say {
 sub list {
 	my $type = shift;
 	my @out;
-	if ($type =~ /^vms?$/i) {
-		my $view = VMUtils::get_vms('VirtualMachine');
-		push @out, $_->name foreach (@$view);
-	} elsif ($type =~ /^hosts?$/i) {
-		my $view = VMUtils::get_vms('HostSystem');
-		push @out, $_->name foreach (@$view);
-	} elsif ($type =~ /^datastores?$/i) {
-		my $view = VMUtils::get_vms('Datastore');
-		push @out, $_->name foreach (@$view);
-	} elsif ($type =~ /^pools?$/i) {
-		my $view = VMUtils::get_vms('ResourcePool');
-		push @out, $_->name foreach (@$view);
-	}
+
+	my %translate = qw/
+		vm		VirtualMachine
+		host		HostSystem
+		datastore	Datastore
+		pool		ResourcePool
+	/;
+
+	return map { $_->name } @{Vim::find_entity_views (
+		view_type => $translate{$type},
+		begin_entity => Vim::get_service_content()->rootFolder,
+		filter => {},
+	)};
 	return @out;
 }
 
@@ -435,7 +427,7 @@ sub multiglob {
 
 sub getinfo {
 	my $vm = shift;
-	my $view = VMUtils::get_vms('VirtualMachine', $vm);
+	my $view = getview('VirtualMachine', $vm);
 	$view = shift @$view;
 	my %info = (
 		name => $view->name,
@@ -491,6 +483,17 @@ sub getview {
 			view_type => $type,
 			filter => { name => $ref },
 		);
+	}
+}
+
+sub error {
+	# FIXME: This function is pretty basic and needs a user-friendlyness upgrade
+	my $action = shift;
+	my $subject = shift;
+	if (ref($@) eq 'SoapFault') {
+		say(0, "An error occured: " . $@->detail);
+	} else {
+		say(0, "General fault!");
 	}
 }
 
@@ -550,29 +553,31 @@ Util::connect();
 # }}} Config loading
 
 my $cmd = shift;
-if ($cmd eq 'list') { # LIST
-	my $type = shift || 'vms';
+if ($cmd eq 'list') { # LIST {{{
+	my $type = shift || 'vm';
+	$type =~ s/s$//; # Correct plurals -> singular
 	fatal("Unknown list type: $type") unless $type =~ /^(datastore|host|vm|pool)s?$/i;
 	my @list = multiglob([list($type)], \@ARGV);
 	print join "\n", @list;
 	print "\n" if @list; # Insert final \n
-
-} elsif ($cmd eq 'show') { # SHOW
-	my @vms = multiglob([list('vms')], \@ARGV);
+# }}} LIST
+} elsif ($cmd eq 'show') { # SHOW {{{
+	my @vms = multiglob([list('vm')], \@ARGV);
 	foreach $vm (@vms) {
 		my %info = getinfo($vm);
 		print "$key = $val\n" while (($key, $val) = each %info);
 		print "\n";
 	}
-
-} elsif ($cmd eq 'migrate') { # MIGRATE FIXME: Requires testing (especially --pool)
+# }}} SHOW
+} elsif ($cmd eq 'migrate') { # MIGRATE FIXME: Requires testing (especially --pool) {{{
 	my $priority = 'low';
-	my $pool, $poolref;
+	my $pool, $poolref, $priorityref;
 	GetOptions(
 		'priority|p=s' => \$priority,
 		'pool|o=s' => \$pool,
 	);
 	fatal("Invalid priority: '$priority'. Choose from: low, normal, high") unless $priority =~ /^low|normal|high$/;
+	my $priorityref = VirtualMachineMovePriority->new($priority);
 
 	my $targethost = pop;
 	fatal('No destination host specified') unless $targethost;
@@ -580,7 +585,7 @@ if ($cmd eq 'list') { # LIST
 	$poolref = getview('ResourcePool', $pool) or fatal("Invalid destination pool: $pool") if ($pool);
 	my $targethostref = getview('HostSystem', $targethost) or fatal("Invalid destination host: $targethost");
 
-	my @vms = multiglob([list('vms')], \@ARGV);
+	my @vms = multiglob([list('vm')], \@ARGV);
 	fatal('No VM\'s match the given pattern') unless scalar(@vms);
 
 	say(2, "Migrating to $targethost with $priority priority");
@@ -590,25 +595,20 @@ if ($cmd eq 'list') { # LIST
 
 		my $vmref = getview('VirtualMachine', $vm) or fatal("Invalid VM: $vm");
 		fatal("Invalid virtual machine: $vm") unless $vmref;
-		my $vmpoolref;
+		my $vmpoolref = $pool ? $poolref : getview('Mor', $vmref->resourcePool); # User either user specified pool or import from source VM
 
-		$vmpool = $pool ? $poolref : getview('Mor', $vmref->resourcePool); # User either user specified pool or import from source VM
-
-		my %vmpoolcheck = HostUtils::check_pool( # Check that the target pool is available on the target as well as the source
-			poolname => $vmpoolref->name,
-			targethost => $targethostref->name,
-		);
-		fatal("Pool: " . $vmpoolref->name . " is not available on the desination host: $targethost") unless ($vmpoolcheck{foundhost});
-
-		VMUtils::migrate_virtualmachine(
-			vm => $vmref,
-			pool => $vmpoolcheck{mor},
-			targethostview => $targethostref,
-			priority => $priority,
-			state => $vm->runtime->powerState->val,
-		) unless $dryrun;
+		eval {
+			$vmref->MigrateVM(
+				host => $targethostref,
+				pool => $vmpoolref,
+				priority => $priorityref,
+				state => $vm->runtime->powerState->val,
+			) unless $dryrun;
+		};
+		error('migrate', $vm, @_) if @_;
 	}
-} elsif ($cmd eq 'move') { # MOVE
+# }}} MIGRATE
+} elsif ($cmd eq 'move') { # MOVE {{{
 	my $pool, $poolref, $success;
 	GetOptions(
 		'pool|o=s' => \$pool,
@@ -621,7 +621,7 @@ if ($cmd eq 'list') { # LIST
 
 	$poolref = getview('ResourcePool', $pool) or fatal("Invalid destination pool: $pool") if ($pool);
 
-	my @vms = multiglob([list('vms')], \@ARGV);
+	my @vms = multiglob([list('vm')], \@ARGV);
 	fatal('No VM\'s match the given pattern') unless scalar(@vms);
 
 	say(2, "Moving to datastore '$targetds'");
@@ -640,20 +640,23 @@ if ($cmd eq 'list') { # LIST
 		my $vmhostref = getview('Mor', $vmref->runtime->host) or fatal("Cannot determine VM host for $vm");
 		my $vmpoolref = $pool ? $poolref : getview('Mor', $vmref->resourcePool); # User either user specified pool or import from source VM
 
-		$vmref->RelocateVM(spec => VirtualMachineRelocateSpec->new(
-			datastore => $targetdsref,
-			host => $vmhostref,
-			pool => $vmpoolref,
-		)) unless $dryrun;
+		eval {
+			$vmref->RelocateVM(spec => VirtualMachineRelocateSpec->new(
+				datastore => $targetdsref,
+				host => $vmhostref,
+				pool => $vmpoolref,
+			)) unless $dryrun;
+		};
+		error('move', $vm, @_) if @_;
 		$success = 1;
 	}
-
-} elsif ($cmd eq 'state') { # STATE
+# }}} MOVE
+} elsif ($cmd eq 'state') { # STATE {{{
 	my $state = shift;
 	fatal('No state specified. Choose: on, off, reboot, shutdown, restart') unless $state;
 	fatal('Invalid power state specified. Choose: on, off, reboot, shutdown, restart') unless $state =~ /^on|off|reboot|shutdown|restart$/;
 
-	my @vms = multiglob([list('vms')], \@ARGV);
+	my @vms = multiglob([list('vm')], \@ARGV);
 	fatal('No VM\'s match the given pattern') unless scalar(@vms);
 	foreach $vm (@vms) {
 		pause() if $vmno++;
@@ -684,7 +687,8 @@ if ($cmd eq 'list') { # LIST
 			}
 		}
 	}
-} elsif ($cmd eq 'setpool') { # SETPOOL
+# }}} STATE
+} elsif ($cmd eq 'setpool') { # SETPOOL {{{
 	my $level = shift;
 	fatal('You must specify a level to set. Choose from: low, normal, high') unless $level;
 	fatal('Invalid level. Choose from: low, normal, high') unless $level =~ /^low|normal|high$/;
@@ -714,57 +718,8 @@ if ($cmd eq 'list') { # LIST
 		my $config = ResourceConfigSpec->new(cpuAllocation=>$cpualloc, memoryAllocation=>$memalloc);
 		$poolref->UpdateConfig(config => $config) unless $dryrun;
 	}
-} else {
+# }}}
+} else { # OTHER {{{
 	fatal("Unknown command: '$cmd'");
-}
-
-__END__
-
-
-my $vm = 'BS26';
-my $sourcehost = 'rockhopper.vittl.it.bond.edu.au';
-my $targethost = 'emperor.vittl.it.bond.edu.au';
-my $datastore = 'VITTL-SAN-1'; # FIXME: Hardcoded
-my $priority = 'lowPriority'; # Hardcoded enum(defaultPriority, highPriority, lowPriority)
-my $pool = 'BusSys'; # Hardcoded
-
-my $source = Vim::find_entity_view(
-	view_type => 'HostSystem',
-	filter => { name => $sourcehost },
-);
-my $target = Vim::find_entity_view(
-	view_type => 'HostSystem',
-	filter => { name => $targethost },
-);
-
-my $method = HostUtils::get_migrate_option(
-	source_host_view => $source,
-	target_host_view => $target,
-	datastore_name => $datastore,
-);
-
-print "Method [$method]\n";
-
-# Check that the target pool is available on the target as well as the source
-my %pool_check = HostUtils::check_pool(
-	poolname => $pool,
-	targethost => $target->name,
-);
-unless ($pool_check{foundhost}) {
-	print "Pool not found"; # FIXME: Exception
-	exit 1;
-}
-
-if ($method eq 'migrate') {
-	my $vmviews = VMUtils::get_vms('VirtualMachine', $vm);
-	foreach (@$vmviews) {
-		print "Migrate " . $_->name . " to " . $target->name . "\n";
-		VMUtils::migrate_virtualmachine(
-			vm => $_,
-			pool => $pool_check{mor},
-			targethostview => $target,
-			priority => $priority,
-			state => $_->runtime->powerState->val,
-		);
-	}
+# }}}
 }
