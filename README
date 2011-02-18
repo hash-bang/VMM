@@ -16,7 +16,7 @@ SYNOPSIS
                 vmm state <on|off|reboot|shutdown|restart> <vms...>
 
     Not yet implemented:
-                vmm clone [-c count] [-m max increment] [-d datastore...] <source vm> <target vm>
+                vmm clone [-c count] [-m max] [-d datastore...] <source vm> <target vm>
                 vmm df [datastore...]
                 vmm logs <vms...>
                 vmm host [maintenance|restore|restart|shutdown] <hosts...>
