@@ -1,0 +1,768 @@
+#!/usr/bin/perl
+=head1 NAME
+
+vmm - Handy tool to manage VMware virtual machines
+
+=head1 SYNOPSIS
+
+	vmm <command> [options]
+
+=over
+	
+=item B<Global syntax:>
+
+	vmm <command> [-f] [-v+] [-w seconds] [@profile]
+
+=item B<Command specific syntax:>
+
+	vmm list [vms|datastores|hosts|pool] [patterns...]
+	vmm migrate [-p low|normal|high] [-o pool] <vms...> <host>
+	vmm move [-o pool] <vms...> <datastore>
+	vmm setpool <low|normal|high> <cpu|mem|all> <pools...>
+	vmm show [vms...]
+	vmm state <on|off|reboot|shutdown|restart> <vms...>
+
+=item B<Not yet implemented:>
+
+	vmm clone [-c count] [-m max increment] [-d datastore...] <source vm> <target vm>
+	vmm df [datastore...]
+	vmm logs <vms...>
+	vmm host [maintenance|restore|restart|shutdown] <hosts...>
+	vmm snapshot [-s name] <vms...>
+	vmm version
+
+=back
+
+=head1 COMMANDS
+
+=over 8
+
+=item B<clone>
+
+Clone a given VM to another VM name.
+If -c is specified multiple copies are made. Each VM name will be incremented in the usual Perlish way. e.g.: DB1, DB2, DB3 etc. Specify -m to specify at what point vmm should give up trying.
+
+If -d is unspcified the datastore of the source VM is copied as the new clones datastore.
+If -d is specified the data store will be set during cloning. If -d contains a comma denoted list the datastores will be alternated during cloning. e.g. -d 1,2 copies to datastore 1 then 2 then starts again at 1.
+
+=item B<df>
+
+Display disk usage information about datastores.
+If a list of matches is provided, the data store list is filtered for those items.
+
+=item B<list>
+
+Display a list of the given items matching a pattern.
+
+Possible lists include (selection can be plural or singular):
+* vms (default if unspecified)
+* datastores
+* hosts
+* pools
+
+=item B<migrate>
+
+Migrate a given list of VMs to another host.
+
+=item B<move>
+
+Move a given list of VMs to another datastore.
+
+=item B<setpool>
+
+Set the share level on the given resource pools.
+
+=item B<show>
+
+Show information about a given list of VMs.
+If no specific matching pattern is specified all VMs are listed.
+
+=item B<state>
+
+Set the state of a list of VMs.
+
+This can be any of the following choices:
+* on - Power up the specified VMs
+* off - Power down the specified VMs. This is a hard power state so data loss could occur.
+* restart - Hard power cycle the VMs. Like 'off' this is a forced power state so data loss could occur.
+* shutdown - Try shutting down the machine via VMware tools
+* reboot - Try shutting down the machine via VMware tools
+
+=back
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<[@profile]>
+
+=over
+
+=item B<Used during:>
+All operations
+
+=item B<Default:>
+First specified profile in config
+
+=item B<Type:>
+Profile name
+
+=back
+
+Specifies which profile to use when addressing the vServer.
+e.g.
+vmm version @cluster1
+OR vmm version @cluster2
+
+Switches between the two profiles setup in the VMM config file
+
+=item B<-c>
+
+=over
+
+=item B<Used during:>
+migrate
+
+=item B<Default:>
+1
+
+=item B<Type:>
+Number
+
+=back
+
+Specifies how many VMs should be created during a clone operation.
+If more than one the target VM name is incremented a maximum number of times specified by the -m flag.
+The name of the target VM is incremented in the usual Perlish way.
+e.g.
+
+DBS1, DBS2, DBS3... DBS10
+DB00, DB01, DB02... DB99
+DBAA, DBAB, DBAC,,, DBZZ
+
+=item B<-d [datastore]>
+
+=over
+
+=item B<Used during:>
+migrate
+
+=item B<Default:>
+Same as source VM
+
+=item B<Type:>
+Datastore name
+
+=back
+
+Specify a data store for operations that require it.
+
+=item B<-f>
+
+=over
+
+=item B<Used during:>
+All operations
+
+=item B<Default:>
+off
+
+=item B<Type:>
+Switch
+
+=back
+
+Force continue if an error occurs.
+Normaly if an error occurs vmm will stop processing any further VMs specified on the command line.
+If this flag is enabled vmm will instead continue operation as if no error occured.
+
+=item B<-m>
+
+=over
+
+=item B<Used during:>
+clone
+
+=item B<Default:>
+99
+
+=item B<Type:>
+Number
+
+=back
+
+Specify the maximum number of incremental names to try before giving up.
+When using the -c flag during a migrate operation vmm trys to find a free target VM name by incrementing the default name given by the user (see -c).
+This flag specifies how many attempts vmm should make before giving up attempting to find a free slot.
+
+=item B<-n>
+
+=item B<--dryrun>
+
+=over
+
+=item B<Used during:>
+All operations
+
+=item B<Default:>
+off
+
+=item B<Type:>
+Switch
+
+=back
+
+Dry run mode.
+When enabled vmm will continue as normal but no actual call to the VMware VServer is made.
+
+=item B<--pool [pool]>
+
+=item B<-o [pool]>
+
+=over
+
+=item B<Used during:>
+clone, migrate, move
+
+=item B<Default:>
+Same as the source VM
+
+=item B<Type:>
+Pool name
+
+=back
+
+Specifies the alternate pool name to use when migrating or cloning machines. If unspecified the source VM's pool is used instead.
+
+=item B<--priority [priority]>
+
+=item B<-p [priority]>
+
+=over
+
+=item B<Used during:>
+migrate
+
+=item B<Default:>
+low
+
+=item B<Type:>
+Choice of: low, normal, high
+
+=back
+
+Specifies the priority when migrating VMs.
+
+=item B<-v>
+
+=item B<--verbose>
+
+=over
+
+=item B<Used during:>
+All operations
+
+=item B<Default:>
+0
+
+=item B<Type:>
+Accumulating switch
+
+=back
+
+Be more verbose when outputting information to STDERR.
+Specify multiple times to increase verbosity.
+
+=item B<-w [seconds]>
+
+=item B<-wait [seconds]>
+
+=over
+
+=item B<Used during:>
+clone, migrate, setpool, state
+
+=item B<Default:>
+0
+
+=item B<Type:>
+Number of seconds
+
+=back
+
+Force a wait for the specified number of seconds between VM operations.
+
+=back
+
+=head1 DESCRIPTION
+
+A command line tool for the manipulation of VMware Virtual Machines (VM).
+
+=head1 EXAMPLES
+
+=over
+
+=item B<vmm migrate DBS* Carl>
+
+Migrate all virtual machines matching 'DBS*' to the 'Carl' host.
+
+=item B<vmm migrate DBS* Lenny -w 60 -o Active -p high>
+
+Migrate all virtual machines matching 'DBS*' with high priority to the 'Active' pool on the 'Lenny' host waiting 60 seconds between machine.
+
+=item B<vmm clone VM01 VM02>
+
+Clone VM01 to VM02.
+Since neither the datasource (-d) or pool (-o) is specified these details are copied from VM01.
+
+=item B<vmm clone DB00 DB01 -c 30>
+
+Clone DB01 to DB02 creating 30 copies. This will actually make the machines DB01 to DB30.
+Since neither the datasource (-d) or pool (-o) is specified these details are copied from VM01.
+
+=item B<vmm clone DB00 DB01 -c 30 -d SAN1,SAN2 -o Active>
+
+Same as the above example but spread the datastores across SAN1 and SAN2 and move the machine to the 'Active' pool.
+
+=item B<vmm move DB00 DB01 SAN2 @cluster2>
+
+Move VMs DB00 and DB01 to the SAN2 datastore within profile 'cluster2'.
+
+=item B<vmm state on DB00 DB01 -w 30>
+
+Turn DB00 and DB01 on waiting 30 seconds between machines.
+
+=back
+
+=head1 FILES
+
+=over 8
+
+=item B</etc/vmmrc>
+
+VMM config file for all users.
+
+=item B<.vmmrc>
+
+VMM config file for the local user.
+
+=head1 BUGS
+
+Quite probably. Please report to the author when found.
+
+=head1 AUTHOR
+
+Matt Carter <m@ttcarter.com>
+
+=cut
+
+
+
+
+use Config::IniFiles;
+use IO::Handle;
+use Getopt::Long;
+use Text::Glob qw/match_glob glob_to_regex/;
+use VMware::VIRuntime;
+Getopt::Long::Configure("bundling", "ignorecase_always");
+STDERR->autoflush(1); # } Flush the output DIRECTLY to the output buffer without caching
+STDOUT->autoflush(1); # }
+
+# FIXME: Debugging modules
+use Data::Dumper;
+
+# FIXME: Import these utils into this file
+use lib '/home/mc/Desktop/VMWare/vmware-vsphere-cli-distrib/apps';
+use AppUtil::HostUtil;
+use AppUtil::VMUtil;
+
+sub fatal {
+	# Print an error message and fatally die
+	print @_, "\n";
+	exit 1;
+}
+
+sub say {
+	# Print a message to STDERR based on the verbosity level
+	our $verbose;
+	my $verbosity = shift;
+	print STDERR @_, "\n";
+}
+
+sub list {
+	my $type = shift;
+	my @out;
+	if ($type =~ /^vms?$/i) {
+		my $view = VMUtils::get_vms('VirtualMachine');
+		push @out, $_->name foreach (@$view);
+	} elsif ($type =~ /^hosts?$/i) {
+		my $view = VMUtils::get_vms('HostSystem');
+		push @out, $_->name foreach (@$view);
+	} elsif ($type =~ /^datastores?$/i) {
+		my $view = VMUtils::get_vms('Datastore');
+		push @out, $_->name foreach (@$view);
+	} elsif ($type =~ /^pools?$/i) {
+		my $view = VMUtils::get_vms('ResourcePool');
+		push @out, $_->name foreach (@$view);
+	}
+	return @out;
+}
+
+sub multiglob {
+	# Perform multiple greps and return all matching list items
+	# e.g. multiglob(qw/apple pear orange tomatoe carrot/, qw/*pp* *ar *zz/) = qw/apple pear/
+	# If the list of matches is empty, all are returned
+	my ($list, $globs) = @_;
+	return @$list unless @$globs;
+	@globs = map { $_ = glob_to_regex($_) } @$globs;
+
+	#print "LIST [" . Dumper($list) . "]";
+	#print "GLOBS [" . Dumper($globs) . "]";
+
+	return grep {
+		my $found = 0;
+		foreach $glob (@$globs) {
+			if ($_ =~ $glob) {
+				$found = 1;
+				last;
+			}
+		}
+		$found;
+	} @$list;
+}
+
+sub getinfo {
+	my $vm = shift;
+	my $view = VMUtils::get_vms('VirtualMachine', $vm);
+	$view = shift @$view;
+	my %info = (
+		name => $view->name,
+		template => $view->summary->config->template eq '0' ? 'none' : $view->summary->config->template,
+		os => $view->summary->guest->guestFullName,
+		datastore => Vim::get_view(mo_ref => ${$view->datastore}[0])->name,
+		pool => Vim::get_view(mo_ref => $view->resourcePool)->name,
+		booted => $view->runtime->bootTime,
+		alloccpu => $view->summary->config->numCpu,
+		allocmem => $view->summary->config->memorySizeMB,
+		allocdisks => $view->summary->config->numVirtualDisks,
+		maxcpu => $view->runtime->maxCpuUsage,
+		maxmem => $view->runtime->maxMemoryUsage,
+		host => Vim::get_view(mo_ref => $view->runtime->host)->name,
+		state => $view->runtime->powerState->val eq 'poweredOn' ? 'on' : 'off',
+		tools => $view->guest->toolsStatus->val eq 'toolsOk' ? 'yes' : 'no',
+	);
+
+	foreach (@{$view->guest->disk}) {
+		my $no;
+		$info{'disk_' . $no++} = $_->diskPath . ' ' . $_->capacity . ' ' . $_->freeSpace;
+	}
+
+	foreach $net (@{$view->guest->net}) {
+		my $no;
+		$info{'net_' . $no++} = $net->network . ' ' . $net->macAddress . ' ' . join(',', @{$net->ipAddress});
+	}
+
+	return %info;
+}
+
+sub pause {
+	# Wait a number of seconds (specified by the -w [seconds]) between VM operations
+	# This function purposely ignores the first vm (thus not bothering to wait for the last vm to finish)
+	our $wait;
+	if ($wait > 0) {
+		say(0, "Waiting $wait seconds...");
+		sleep($wait);
+	}
+}
+
+sub getview {
+	# Return a VMware view object from its type and reference
+	# This function also supports the meta type 'Mor' which looks up the view by the managed object reference
+	my $type = shift; # HostSystem, VirtualMachine, ResourcePool
+	my $ref = shift;
+	if ($type eq 'Mor') {
+		return Vim::get_view(
+			mo_ref => $ref,
+		);
+	} else {
+		return Vim::find_entity_view(
+			view_type => $type,
+			filter => { name => $ref },
+		);
+	}
+}
+
+GetOptions(
+	'dryrun|n' => \$dryrun,
+	'verbose|v+' => \$verbose,
+	'wait|w=i' => \$wait,
+);
+
+# Config loading {{{
+my $profile; # The active profile to use
+my $cfg = Config::IniFiles->new(
+	-file => "/home/mc/.vmmrc", # FIXME
+	-default => 'global',
+	-fallback => 'global',
+	-nocase => 1,
+	-allowempty => 1,
+	-handle_trailing_comment => 1,
+);
+our $verbose = $cfg->val($profile, 'verbose', 0); # Early import so 'say' works correctly in the following profile options
+
+@ARGV = grep { # Scan for '@profile' strings in @ARGV
+	if (/^@(.+)$/) {
+		fatal("Only one profile may be set per invocation. Profile was originally '$profile' when you tried to override with '$_'") if $profile;
+		$profile = $1;
+		undef;
+	} else {
+		$_;
+	}
+} @ARGV;
+if ($profile) { # User wants to select a specific profile
+	fatal("Profile not valid: $profile") unless $cfg->exists($profile, 'url');
+	say(2, "Using user set profile '$profile'");
+} elsif ($cfg->exists('global', 'profile')) { # Default profile option set in config
+	$profile = $cfg->val('global', 'profile');
+	say(2, "Using config file default profile '$profile'");
+} else { # Use first section found that isn't 'global'
+	$profile = [grep { $_ ne 'global' } $cfg->Sections]->[0];
+	say(2, "Using first found profile '$profile'");
+}
+
+$profile = $cfg->val('global', 'profile', $profile);
+
+fatal("No vServer URL specified for profile $profile") unless $cfg->exists($profile, 'url');
+fatal("No vServer Username specified for profile $profile") unless $cfg->exists($profile, 'username');
+fatal("No vServer Password specified for profile $profile") unless $cfg->exists($profile, 'password');
+
+our $dryrun = $cfg->val($profile, 'dryrun', 0);
+our $wait = $cfg->val($profile, 'wait', 0);
+our $vmno = 0; # Offset of the VM we are operating on
+Opts::set_option('url', $cfg->val($profile, 'url'));
+Opts::set_option('username', $cfg->val($profile, 'username'));
+Opts::set_option('password', $cfg->val($profile, 'password'));
+
+say(3, "Connecting to " . $cfg->val($profile, 'username') . '@' . $cfg->val($profile, 'url'));
+Util::connect();
+# }}} Config loading
+
+my $cmd = shift;
+if ($cmd eq 'list') { # LIST
+	my $type = shift || 'vms';
+	fatal("Unknown list type: $type") unless $type =~ /^(datastore|host|vm|pool)s?$/i;
+	my @list = multiglob([list($type)], \@ARGV);
+	print join "\n", @list;
+	print "\n" if @list; # Insert final \n
+
+} elsif ($cmd eq 'show') { # SHOW
+	my @vms = multiglob([list('vms')], \@ARGV);
+	foreach $vm (@vms) {
+		my %info = getinfo($vm);
+		print "$key = $val\n" while (($key, $val) = each %info);
+		print "\n";
+	}
+
+} elsif ($cmd eq 'migrate') { # MIGRATE FIXME: Requires testing (especially --pool)
+	my $priority = 'low';
+	my $pool, $poolref;
+	GetOptions(
+		'priority|p=s' => \$priority,
+		'pool|o=s' => \$pool,
+	);
+	fatal("Invalid priority: '$priority'. Choose from: low, normal, high") unless $priority =~ /^low|normal|high$/;
+
+	my $targethost = pop;
+	fatal('No destination host specified') unless $targethost;
+
+	$poolref = getview('ResourcePool', $pool) or fatal("Invalid destination pool: $pool") if ($pool);
+	my $targethostref = getview('HostSystem', $targethost) or fatal("Invalid destination host: $targethost");
+
+	my @vms = multiglob([list('vms')], \@ARGV);
+	fatal('No VM\'s match the given pattern') unless scalar(@vms);
+
+	say(2, "Migrating to $targethost with $priority priority");
+	foreach $vm (@vms) {
+		pause() if $vmno++;
+		say(1, "Migrate $vm -> $targethost");
+
+		my $vmref = getview('VirtualMachine', $vm) or fatal("Invalid VM: $vm");
+		fatal("Invalid virtual machine: $vm") unless $vmref;
+		my $vmpoolref;
+
+		$vmpool = $pool ? $poolref : getview('Mor', $vmref->resourcePool); # User either user specified pool or import from source VM
+
+		my %vmpoolcheck = HostUtils::check_pool( # Check that the target pool is available on the target as well as the source
+			poolname => $vmpoolref->name,
+			targethost => $targethostref->name,
+		);
+		fatal("Pool: " . $vmpoolref->name . " is not available on the desination host: $targethost") unless ($vmpoolcheck{foundhost});
+
+		VMUtils::migrate_virtualmachine(
+			vm => $vmref,
+			pool => $vmpoolcheck{mor},
+			targethostview => $targethostref,
+			priority => $priority,
+			state => $vm->runtime->powerState->val,
+		) unless $dryrun;
+	}
+} elsif ($cmd eq 'move') { # MOVE
+	my $pool, $poolref, $success;
+	GetOptions(
+		'pool|o=s' => \$pool,
+	);
+
+	my $targetds = pop;
+	fatal('No destination datasore specified') unless $targetds;
+
+	my $targetdsref = getview('Datastore', $targetds) or fatal("Invalid destination datastore: $targetds");
+
+	$poolref = getview('ResourcePool', $pool) or fatal("Invalid destination pool: $pool") if ($pool);
+
+	my @vms = multiglob([list('vms')], \@ARGV);
+	fatal('No VM\'s match the given pattern') unless scalar(@vms);
+
+	say(2, "Moving to datastore '$targetds'");
+	foreach $vm (@vms) {
+		pause() if $vmno++ and $success;
+		$success = 0;
+		say(1, "Move $vm -> $targetds");
+
+		my $vmref = getview('VirtualMachine', $vm) or fatal("Invalid VM: $vm");
+		fatal("Invalid virtual machine: $vm") unless $vmref;
+		if (getview('Mor', $vmref->datastore->[0])->name eq $targetdsref->name) {
+			say(0, "$vm is already located in datastore '$targetds'");
+			next;
+		}
+
+		my $vmhostref = getview('Mor', $vmref->runtime->host) or fatal("Cannot determine VM host for $vm");
+		my $vmpoolref = $pool ? $poolref : getview('Mor', $vmref->resourcePool); # User either user specified pool or import from source VM
+
+		$vmref->RelocateVM(spec => VirtualMachineRelocateSpec->new(
+			datastore => $targetdsref,
+			host => $vmhostref,
+			pool => $vmpoolref,
+		)) unless $dryrun;
+		$success = 1;
+	}
+
+} elsif ($cmd eq 'state') { # STATE
+	my $state = shift;
+	fatal('No state specified. Choose: on, off, reboot, shutdown, restart') unless $state;
+	fatal('Invalid power state specified. Choose: on, off, reboot, shutdown, restart') unless $state =~ /^on|off|reboot|shutdown|restart$/;
+
+	my @vms = multiglob([list('vms')], \@ARGV);
+	fatal('No VM\'s match the given pattern') unless scalar(@vms);
+	foreach $vm (@vms) {
+		pause() if $vmno++;
+		my $vmref = getview('VirtualMachine', $vm);
+		fatal("Invalid virtual machine: $vm") unless $vmref;
+		if ($state eq 'on') {
+			if ($vmref->runtime->powerState->val eq 'poweredOff') {
+				say(1, "Powering on $vm");
+				$vmref->PowerOnVM() unless $dryrun;
+			} else {
+				say(0, "$vm needs to be powered off before it can be turned on (VMware recognises the power state as '" . $vm->runtime->powerState->val . "')!");
+			}
+		} elsif ($state =~ /^reboot|off|shutdown|restart$/) {
+			if ($vmref->runtime->powerState->val ne 'poweredOn') {
+				say(0, "Cannot change VM state to '$state' for '$vm' from the current state '" . $vm->runtime->powerState->val . "'");
+			} elsif ($state eq 'reboot') {
+				say(1, "Rebooting $vm");
+				$vmref->ResetVM() unless $dryrun;
+			} elsif ($state eq 'off') {
+				say(1, "Powering off $vm");
+				$vmref->PowerOffVM() unless $dryrun;
+			} elsif ($state eq 'shutdown') {
+				say(1, "Shutting down $vm");
+				$vmref->ShutdownGuest() unless $dryrun;
+			} elsif ($state eq 'restart') {
+				say(1, "Restarting $vm");
+				$vmref->RebootGuest() unless $dryrun;
+			}
+		}
+	}
+} elsif ($cmd eq 'setpool') { # SETPOOL
+	my $level = shift;
+	fatal('You must specify a level to set. Choose from: low, normal, high') unless $level;
+	fatal('Invalid level. Choose from: low, normal, high') unless $level =~ /^low|normal|high$/;
+	my $item = shift;
+	fatal('You must specify what item to set. Choose from: cpu, mem, all') unless $item;
+	fatal('Invalid item selection. Choose from: cpu, mem, all') unless $item =~ /^cpu|mem|all$/;
+
+	my @pools = multiglob([list('pools')], \@ARGV);
+	fatal('No pools match the given pattern') unless scalar(@pools);
+	foreach $pool (@pools) {
+		pause() if $vmno++;
+		my $poolref = getview('ResourcePool', $pool);
+		fatal("Invalid resource pool: $pool") unless $poolref;
+
+		my $newshare = SharesInfo->new(shares => 0, level => SharesLevel->new($level));
+		my $cpualloc, $memalloc;
+		if ($item eq 'cpu') { # Set CPU, import RAM
+			$cpualloc = ResourceAllocationInfo->new(shares=>$newshare);
+			$memalloc = $poolref->config->memoryAllocation;
+		} elsif ($item eq 'mem') { # Set RAM, import CPU
+			$cpualloc = $poolref->config->cpuAllocation;
+			$memalloc = ResourceAllocationInfo->new(shares=>$newshare);
+		} else { # Set both to the same value
+			$cpualloc = ResourceAllocationInfo->new(shares=>$newshare);
+			$memalloc = ResourceAllocationInfo->new(shares=>$newshare);
+		}
+		my $config = ResourceConfigSpec->new(cpuAllocation=>$cpualloc, memoryAllocation=>$memalloc);
+		$poolref->UpdateConfig(config => $config) unless $dryrun;
+	}
+} else {
+	fatal("Unknown command: '$cmd'");
+}
+
+__END__
+
+
+my $vm = 'BS26';
+my $sourcehost = 'rockhopper.vittl.it.bond.edu.au';
+my $targethost = 'emperor.vittl.it.bond.edu.au';
+my $datastore = 'VITTL-SAN-1'; # FIXME: Hardcoded
+my $priority = 'lowPriority'; # Hardcoded enum(defaultPriority, highPriority, lowPriority)
+my $pool = 'BusSys'; # Hardcoded
+
+my $source = Vim::find_entity_view(
+	view_type => 'HostSystem',
+	filter => { name => $sourcehost },
+);
+my $target = Vim::find_entity_view(
+	view_type => 'HostSystem',
+	filter => { name => $targethost },
+);
+
+my $method = HostUtils::get_migrate_option(
+	source_host_view => $source,
+	target_host_view => $target,
+	datastore_name => $datastore,
+);
+
+print "Method [$method]\n";
+
+# Check that the target pool is available on the target as well as the source
+my %pool_check = HostUtils::check_pool(
+	poolname => $pool,
+	targethost => $target->name,
+);
+unless ($pool_check{foundhost}) {
+	print "Pool not found"; # FIXME: Exception
+	exit 1;
+}
+
+if ($method eq 'migrate') {
+	my $vmviews = VMUtils::get_vms('VirtualMachine', $vm);
+	foreach (@$vmviews) {
+		print "Migrate " . $_->name . " to " . $target->name . "\n";
+		VMUtils::migrate_virtualmachine(
+			vm => $_,
+			pool => $pool_check{mor},
+			targethostview => $target,
+			priority => $priority,
+			state => $_->runtime->powerState->val,
+		);
+	}
+}
