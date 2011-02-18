@@ -346,6 +346,8 @@ VMM config file for all users.
 
 VMM config file for the local user.
 
+=back
+
 =head1 BUGS
 
 Quite probably. Please report to the author when found.
