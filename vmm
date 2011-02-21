@@ -22,6 +22,7 @@ vmm - Handy tool to manage VMware virtual machines
 	vmm setpool <low|normal|high> <cpu|mem|all> <pools...>
 	vmm show [vms...]
 	vmm state <on|off|reboot|shutdown|restart> <vms...>
+	vmm version
 
 =item B<Not yet implemented:>
 
@@ -29,7 +30,6 @@ vmm - Handy tool to manage VMware virtual machines
 	vmm logs <vms...>
 	vmm host [maintenance|restore|restart|shutdown] <hosts...>
 	vmm snapshot [-s name] <vms...>
-	vmm version
 
 =back
 
@@ -87,6 +87,11 @@ This can be any of the following choices:
 * restart - Hard power cycle the VMs. Like 'off' this is a forced power state so data loss could occur.
 * shutdown - Try shutting down the machine via VMware tools
 * reboot - Try shutting down the machine via VMware tools
+
+=item B<version>
+
+Display various version informaiton about the connected vServer and local API.
+This command is the default if no actual command is specified (i.e. just running 'vmm' with nothing else specified).
 
 =back
 
@@ -836,6 +841,13 @@ if ($cmd eq 'list') { # LIST {{{
 		print sprintf('%d', (($dsref->info->vmfs->capacity - $dsref->info->freeSpace) / $dsref->info->vmfs->capacity * 100)), "%\t";
 		print "\n";
 	}
+# }}}
+} elsif ($cmd eq 'version' or !$cmd) { # VERSION {{{
+	my $service = Vim::get_service_content();
+	print "vServer name: " . $service->about->fullName, "\n";
+	print "vServer OS: " . $service->about->osType . "\n";
+	print "API version: " . $service->about->apiVersion . " (build " . $service->about->build, ")\n";
+	print "Perl toolkit version: " . VMware::VIRuntime->VERSION . "\n";
 # }}}
 } else { # OTHER {{{
 	fatal("Unknown command: '$cmd'");
