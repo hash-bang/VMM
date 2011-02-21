@@ -108,6 +108,7 @@ OPTIONS
             command line. If this flag is enabled vmm will instead continue
             operation as if no error occured.
 
+    --human
     -h
 
             Used during: df
@@ -230,6 +231,7 @@ CONFIG
             verbose = 2
             profile = Cluster1
             dryrun = 0
+            human = 1
         
             [Cluster1]
             url = https://cluster1.acme.edu
@@ -258,6 +260,13 @@ CONFIG
             The authentication information when connecting to the vServer.
 
     dryrun  Specify a default dry run value. See -n for further information.
+
+    human   Always output numbers in a human readable format rather than the
+            raw form.
+
+    priority
+            Specify a default priority when using any command that is '-p'
+            compatible.
 
     profile Specify the default profile to use if none is explicitally set.
             If not specified the first found profile in the config file is
