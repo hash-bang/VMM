@@ -15,6 +15,7 @@ vmm - Handy tool to manage VMware virtual machines
 
 =item B<Command specific syntax:>
 
+	vmm df [-h] [datastore...]
 	vmm list [vms|datastores|hosts|pool] [patterns...]
 	vmm migrate [-p low|normal|high] [-o pool] <vms...> <host>
 	vmm move [-o pool] <vms...> <datastore>
@@ -25,7 +26,6 @@ vmm - Handy tool to manage VMware virtual machines
 =item B<Not yet implemented:>
 
 	vmm clone [-c count] [-m max] [-d datastore...] <source vm> <target vm>
-	vmm df [datastore...]
 	vmm logs <vms...>
 	vmm host [maintenance|restore|restart|shutdown] <hosts...>
 	vmm snapshot [-s name] <vms...>
@@ -175,6 +175,23 @@ Switch
 Force continue if an error occurs.
 Normaly if an error occurs vmm will stop processing any further VMs specified on the command line.
 If this flag is enabled vmm will instead continue operation as if no error occured.
+
+=item B<-h>
+
+=over
+
+=item B<Used during:>
+df
+
+=item B<Default:>
+off
+
+=item B<Type:>
+Switch
+
+=back
+
+Display the numbers of the 'df' command in a human readable format.
 
 =item B<-m>
 
@@ -423,9 +440,10 @@ Matt Carter <m@ttcarter.com>
 use Config::IniFiles;
 use IO::Handle;
 use Getopt::Long;
+use Number::Bytes::Human qw/format_bytes/;
 use Text::Glob qw/match_glob glob_to_regex/;
 use VMware::VIRuntime;
-Getopt::Long::Configure("bundling", "ignorecase_always");
+Getopt::Long::Configure('bundling', 'ignorecase_always', 'pass_through');
 STDERR->autoflush(1); # } Flush the output DIRECTLY to the output buffer without caching
 STDOUT->autoflush(1); # }
 
@@ -433,7 +451,7 @@ use Data::Dumper; # FIXME: Debugging modules
 
 sub fatal {
 	# Print an error message and fatally die
-	print @_, "\n";
+	print STDERR @_, "\n";
 	exit 1;
 }
 
@@ -787,6 +805,28 @@ if ($cmd eq 'list') { # LIST {{{
 		}
 		my $config = ResourceConfigSpec->new(cpuAllocation=>$cpualloc, memoryAllocation=>$memalloc);
 		$poolref->UpdateConfig(config => $config) unless $dryrun;
+	}
+# }}}
+} elsif ($cmd eq 'df') { # DF {{{
+	my $human = 0;
+	GetOptions(
+		'human|h' => \$human,
+	);
+
+	my @datastores = multiglob([list('datastore')], \@ARGV);
+	fatal('No datastores match the given pattern') unless scalar(@datastores);
+
+	print "Name\tSize\tUsed\tAvail\tUse%\n";
+
+
+	foreach $ds (@datastores) {
+		my $dsref = getview('Datastore', $ds) or fatal("Invalid datastore: $ds");
+		print $dsref->info->vmfs->name . "\t";
+		print $human ? format_bytes($dsref->info->vmfs->capacity) : $dsref->info->vmfs->capacity, "\t";
+		print $human ? format_bytes($dsref->info->vmfs->capacity - $dsref->info->freeSpace) : ($dsref->info->vmfs->capacity - $dsref->info->freeSpace), "\t";
+		print $human ? format_bytes($dsref->info->freeSpace) : $dsref->info->freeSpace, "\t";
+		print sprintf('%d', (($dsref->info->vmfs->capacity - $dsref->info->freeSpace) / $dsref->info->vmfs->capacity * 100)), "%\t";
+		print "\n";
 	}
 # }}}
 } else { # OTHER {{{
