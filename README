@@ -8,6 +8,7 @@ SYNOPSIS
                 vmm <command> [-f] [-v+] [-w seconds] [@profile]
 
     Command specific syntax:
+                vmm df [-h] [datastore...]
                 vmm list [vms|datastores|hosts|pool] [patterns...]
                 vmm migrate [-p low|normal|high] [-o pool] <vms...> <host>
                 vmm move [-o pool] <vms...> <datastore>
@@ -17,7 +18,6 @@ SYNOPSIS
 
     Not yet implemented:
                 vmm clone [-c count] [-m max] [-d datastore...] <source vm> <target vm>
-                vmm df [datastore...]
                 vmm logs <vms...>
                 vmm host [maintenance|restore|restart|shutdown] <hosts...>
                 vmm snapshot [-s name] <vms...>
@@ -107,6 +107,15 @@ OPTIONS
             vmm will stop processing any further VMs specified on the
             command line. If this flag is enabled vmm will instead continue
             operation as if no error occured.
+
+    -h
+
+            Used during: df
+            Default: off
+            Type: Switch
+
+            Display the numbers of the 'df' command in a human readable
+            format.
 
     -m
 
