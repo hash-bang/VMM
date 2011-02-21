@@ -3,5 +3,8 @@ README: vmm
 	git add README
 	git commit -m 'Auto update from POD'
 
-push: docs
+commit: README
+	git commit -a
+
+push: commit
 	git push
