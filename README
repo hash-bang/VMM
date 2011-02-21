@@ -15,13 +15,13 @@ SYNOPSIS
                 vmm setpool <low|normal|high> <cpu|mem|all> <pools...>
                 vmm show [vms...]
                 vmm state <on|off|reboot|shutdown|restart> <vms...>
+                vmm version
 
     Not yet implemented:
                 vmm clone [-c count] [-m max] [-d datastore...] <source vm> <target vm>
                 vmm logs <vms...>
                 vmm host [maintenance|restore|restart|shutdown] <hosts...>
                 vmm snapshot [-s name] <vms...>
-                vmm version
 
 COMMANDS
     clone   Clone a given VM to another VM name. If -c is specified multiple
@@ -62,6 +62,11 @@ COMMANDS
             data loss could occur. * shutdown - Try shutting down the
             machine via VMware tools * reboot - Try shutting down the
             machine via VMware tools
+
+    version Display various version informaiton about the connected vServer
+            and local API. This command is the default if no actual command
+            is specified (i.e. just running 'vmm' with nothing else
+            specified).
 
 OPTIONS
     [@profile]
