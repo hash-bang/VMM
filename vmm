@@ -22,7 +22,7 @@ vmm - Manage VMware virtual machines
 	vmm setpool <low|normal|high> <cpu|mem|all> <pools...>
 	vmm show [vm|datastore|host|pool] [vms...]
 	vmm snapshot [--t title] <vms...>
-	vmm state <on|off|reboot|shutdown|restart> <vms...>
+	vmm state <on|off|suspend|reboot|shutdown|restart|standby> <vms...>
 	vmm version
 
 =item B<Not yet implemented:>
@@ -89,9 +89,11 @@ Set the state of a list of VMs.
 This can be any of the following choices:
 * on - Power up the specified VMs
 * off - Power down the specified VMs. This is a hard power state so data loss could occur.
+* suspend - Power the machine into standby mode. This is a hard power state which does not rely on VMware tools.
 * restart - Hard power cycle the VMs. Like 'off' this is a forced power state so data loss could occur.
-* shutdown - Try shutting down the machine via VMware tools
-* reboot - Try shutting down the machine via VMware tools
+* shutdown - Try shutting down the machine via VMware tools.
+* standby - Try to put the machine into the soft standby state.
+* reboot - Try shutting down the machine via VMware tools.
 
 =item B<version>
 
@@ -883,7 +885,7 @@ if ($cmd eq 'list') { # LIST {{{
 		print "\n";
 	}
 # }}} SHOW
-} elsif ($cmd eq 'migrate') { # MIGRATE FIXME: Requires testing (especially --pool) {{{
+} elsif ($cmd eq 'migrate') { # MIGRATE
 	my $pool, $poolref, $priorityref;
 	fatal("Invalid priority: '$priority'. Choose from: low, normal, high") unless $priority =~ /^low|normal|high$/;
 	my $priorityref = VirtualMachineMovePriority->new($priority);
@@ -957,8 +959,8 @@ if ($cmd eq 'list') { # LIST {{{
 # }}} MOVE
 } elsif ($cmd eq 'state') { # STATE {{{
 	my $state = shift;
-	fatal('No state specified. Choose: on, off, reboot, shutdown, restart') unless $state;
-	fatal('Invalid power state specified. Choose: on, off, reboot, shutdown, restart') unless $state =~ /^on|off|reboot|shutdown|restart$/;
+	fatal('No state specified. Choose: on, off, suspend, reboot, shutdown, restart, standby') unless $state;
+	fatal('Invalid power state specified. Choose: on, off, suspend, reboot, shutdown, restart, standby') unless $state =~ /^on|off|reboot|shutdown|suspend|standby|restart$/;
 
 	my @vms = multiglob([list('VirtualMachine')], \@ARGV);
 	fatal('No VM\'s match the given pattern') unless scalar(@vms);
@@ -972,15 +974,21 @@ if ($cmd eq 'list') { # LIST {{{
 			} else {
 				say(0, "$vm needs to be powered off before it can be turned on (VMware recognises the power state as '" . $vm->runtime->powerState->val . "')!");
 			}
-		} elsif ($state =~ /^reboot|off|shutdown|restart$/) {
+		} elsif ($state =~ /^reboot|off|shutdown|suspend|standby|restart$/) {
 			if ($vmref->runtime->powerState->val ne 'poweredOn') {
 				say(0, "Cannot change VM state to '$state' for '$vm' from the current state '" . $vm->runtime->powerState->val . "'");
 			} elsif ($state eq 'reboot') {
 				say(1, "Rebooting $vm");
 				$vmref->ResetVM() unless $dryrun;
+			} elsif ($state eq 'suspend') {
+				say(1, "Suspending $vm");
+				$vmref->SuspendVM() unless $dryrun;
 			} elsif ($state eq 'off') {
 				say(1, "Powering off $vm");
 				$vmref->PowerOffVM() unless $dryrun;
+			} elsif ($state eq 'standby') {
+				say(1, "Standby $vm");
+				$vmref->StandbyGuest() unless $dryrun;
 			} elsif ($state eq 'shutdown') {
 				say(1, "Shutting down $vm");
 				$vmref->ShutdownGuest() unless $dryrun;
