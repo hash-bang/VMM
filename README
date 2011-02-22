@@ -9,11 +9,11 @@ SYNOPSIS
 
     Command specific syntax:
                 vmm df [-h] [datastore...]
-                vmm list [vms|datastores|hosts|pool] [patterns...]
+                vmm list [-d col1,col2...] [vms|datastores|hosts|pool] [patterns...]
                 vmm migrate [-p low|normal|high] [-o pool] <vms...> <host>
                 vmm move [-o pool] <vms...> <datastore>
                 vmm setpool <low|normal|high> <cpu|mem|all> <pools...>
-                vmm show [vms...]
+                vmm show [vm|datastore|host|pool] [vms...]
                 vmm state <on|off|reboot|shutdown|restart> <vms...>
                 vmm version
 
@@ -50,8 +50,9 @@ COMMANDS
 
     setpool Set the share level on the given resource pools.
 
-    show    Show information about a given list of VMs. If no specific
-            matching pattern is specified all VMs are listed.
+    show    Show information about a given object. If no specific object
+            type is specified 'vm' is assumed. If no specific matching
+            pattern is specified all objects of that type are listed.
 
     state   Set the state of a list of VMs.
 
