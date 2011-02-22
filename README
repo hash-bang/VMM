@@ -14,6 +14,7 @@ SYNOPSIS
                 vmm move [-o pool] <vms...> <datastore>
                 vmm setpool <low|normal|high> <cpu|mem|all> <pools...>
                 vmm show [vm|datastore|host|pool] [vms...]
+                vmm snapshot [--t title] <vms...>
                 vmm state <on|off|reboot|shutdown|restart> <vms...>
                 vmm version
 
@@ -21,7 +22,6 @@ SYNOPSIS
                 vmm clone [-c count] [-m max] [-a datastore...] <source vm> <target vm>
                 vmm logs <vms...>
                 vmm host [maintenance|restore|restart|shutdown] <hosts...>
-                vmm snapshot [-s name] <vms...>
 
 COMMANDS
     clone   Clone a given VM to another VM name. If -c is specified multiple
@@ -53,6 +53,11 @@ COMMANDS
     show    Show information about a given object. If no specific object
             type is specified 'vm' is assumed. If no specific matching
             pattern is specified all objects of that type are listed.
+
+    snapshot
+            Take a snapshot of the matching VM's. If '-t' is specified, it
+            is used as the title of the snapshot. Otherwise the current time
+            is used.
 
     state   Set the state of a list of VMs.
 
@@ -190,6 +195,15 @@ OPTIONS
 
             Specifies the string to display between columns when outputing a
             list.
+
+    --title [title]
+    -t [title]
+
+            Used during: snapshot
+            Default: The Unix EPOC
+            Type: String
+
+            The title of the snapshot to create.
 
     -v
     --verbose
