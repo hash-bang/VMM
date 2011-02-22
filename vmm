@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 =head1 NAME
 
-vmm - Handy tool to manage VMware virtual machines
+vmm - Manage VMware virtual machines
 
 =head1 SYNOPSIS
 
@@ -26,7 +26,7 @@ vmm - Handy tool to manage VMware virtual machines
 
 =item B<Not yet implemented:>
 
-	vmm clone [-c count] [-m max] [-d datastore...] <source vm> <target vm>
+	vmm clone [-c count] [-m max] [-a datastore...] <source vm> <target vm>
 	vmm logs <vms...>
 	vmm host [maintenance|restore|restart|shutdown] <hosts...>
 	vmm snapshot [-s name] <vms...>
@@ -42,8 +42,8 @@ vmm - Handy tool to manage VMware virtual machines
 Clone a given VM to another VM name.
 If -c is specified multiple copies are made. Each VM name will be incremented in the usual Perlish way. e.g.: DB1, DB2, DB3 etc. Specify -m to specify at what point vmm should give up trying.
 
-If -d is unspcified the datastore of the source VM is copied as the new clones datastore.
-If -d is specified the data store will be set during cloning. If -d contains a comma denoted list the datastores will be alternated during cloning. e.g. -d 1,2 copies to datastore 1 then 2 then starts again at 1.
+If -a is unspcified the datastore of the source VM is copied as the new clones datastore.
+If -a is specified the data store will be set during cloning. If -a contains a comma denoted list the datastores will be alternated during cloning. e.g. -a 1,2 copies to datastore 1 then 2 then starts again at 1.
 
 =item B<df>
 
@@ -145,7 +145,32 @@ DBS1, DBS2, DBS3... DBS10
 DB00, DB01, DB02... DB99
 DBAA, DBAB, DBAC,,, DBZZ
 
-=item B<-d [datastore]>
+=item B<--display [col1,col2...]>
+
+=item B<-d [col1,col2...]>
+
+=over
+
+=item B<Used during:>
+list
+
+=item B<Default:>
+Name
+
+=item B<Type:>
+
+Command seperated list of columns to display in tabular output when using the 'list' command.
+See also: -s to specify the seperation character to use between the columns.
+
+=back
+
+Specify a data store for operations that require it.
+
+=item B<--datastore [datastore]>
+
+=item B<--ds [datastore]>
+
+=item B<-a [datastore]>
 
 =over
 
@@ -219,9 +244,9 @@ Specify the maximum number of incremental names to try before giving up.
 When using the -c flag during a migrate operation vmm trys to find a free target VM name by incrementing the default name given by the user (see -c).
 This flag specifies how many attempts vmm should make before giving up attempting to find a free slot.
 
-=item B<-n>
-
 =item B<--dryrun>
+
+=item B<-n>
 
 =over
 
@@ -276,6 +301,25 @@ Choice of: low, normal, high
 =back
 
 Specifies the priority when migrating VMs.
+
+=item B<--seperator [character]>
+
+=item B<-s [character]>
+
+=over
+
+=item B<Used during:>
+list
+
+=item B<Default:>
+\t (tab)
+
+=item B<Type:>
+String
+
+=back
+
+Specifies the string to display between columns when outputing a list.
 
 =item B<-v>
 
@@ -384,6 +428,7 @@ The layout of the config file spcifies which profiles to use.
 	profile = Cluster1
 	dryrun = 0
 	human = 1
+	seperator = \t
 	
 	[Cluster1]
 	url = https://cluster1.acme.edu
@@ -436,6 +481,10 @@ Specify the default profile to use if none is explicitally set. If not specified
 Specify a substitution regular expression to use when correcting host names.
 The value given in the above example will remove any trailing DNS name correcting 'host1.a.very.long.dns.com' to 'host1'.
 
+=item B<seperator>
+
+Specify the seperator character used when outputting tabular data with the 'list' command.
+
 =item B<verbose>
 
 Specify a default verbosity level. See B<-v> for further information.
@@ -444,7 +493,9 @@ Specify a default verbosity level. See B<-v> for further information.
 
 =head1 BUGS
 
-Quite probably. Please report to the author when found.
+Quite probably.
+
+Please report to https://github.com/hash-bang/VMM when found.
 
 =head1 AUTHOR
 
