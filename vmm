@@ -21,6 +21,7 @@ vmm - Manage VMware virtual machines
 	vmm move [-o pool] <vms...> <datastore>
 	vmm setpool <low|normal|high> <cpu|mem|all> <pools...>
 	vmm show [vm|datastore|host|pool] [vms...]
+	vmm snapshot [--t title] <vms...>
 	vmm state <on|off|reboot|shutdown|restart> <vms...>
 	vmm version
 
@@ -29,7 +30,6 @@ vmm - Manage VMware virtual machines
 	vmm clone [-c count] [-m max] [-a datastore...] <source vm> <target vm>
 	vmm logs <vms...>
 	vmm host [maintenance|restore|restart|shutdown] <hosts...>
-	vmm snapshot [-s name] <vms...>
 
 =back
 
@@ -76,6 +76,11 @@ Set the share level on the given resource pools.
 
 Show information about a given object. If no specific object type is specified 'vm' is assumed.
 If no specific matching pattern is specified all objects of that type are listed.
+
+=item B<snapshot>
+
+Take a snapshot of the matching VM's.
+If '-t' is specified, it is used as the title of the snapshot. Otherwise the current time is used.
 
 =item B<state>
 
@@ -320,6 +325,25 @@ String
 =back
 
 Specifies the string to display between columns when outputing a list.
+
+=item B<--title [title]>
+
+=item B<-t [title]>
+
+=over
+
+=item B<Used during:>
+snapshot
+
+=item B<Default:>
+The Unix EPOC
+
+=item B<Type:>
+String
+
+=back
+
+The title of the snapshot to create.
 
 =item B<-v>
 
@@ -790,6 +814,7 @@ our $wait = $cfg->val($profile, 'wait', 0);
 my $priority = $cfg->val($profile, 'priority', 'low');
 my $human = $cfg->val($profile, 'human', '0');
 my $seperator = $cfg->val($profile, 'seperator', "\t");
+my $title;
 Opts::set_option('url', $cfg->val($profile, 'url'));
 Opts::set_option('username', $cfg->val($profile, 'username'));
 Opts::set_option('password', $cfg->val($profile, 'password'));
@@ -810,6 +835,7 @@ GetOptions(
 	'human|h' => \$human,
 	'display|d=s' => \@display,
 	'seperator|s=s' => \$seperator,
+	'title|t=s' => \$title,
 );
 
 # Post-processing options
@@ -938,8 +964,7 @@ if ($cmd eq 'list') { # LIST {{{
 	fatal('No VM\'s match the given pattern') unless scalar(@vms);
 	foreach $vm (@vms) {
 		pause() if $vmno++;
-		my $vmref = getview('VirtualMachine', $vm);
-		fatal("Invalid virtual machine: $vm") unless $vmref;
+		my $vmref = getview('VirtualMachine', $vm) or fatal("Invalid virtual machine: $vm");
 		if ($state eq 'on') {
 			if ($vmref->runtime->powerState->val eq 'poweredOff') {
 				say(1, "Powering on $vm");
@@ -996,7 +1021,32 @@ if ($cmd eq 'list') { # LIST {{{
 		my $config = ResourceConfigSpec->new(cpuAllocation=>$cpualloc, memoryAllocation=>$memalloc);
 		$poolref->UpdateConfig(config => $config) unless $dryrun;
 	}
-# }}}
+# }}} DF
+} elsif ($cmd eq 'snapshot') { # SNAPSHOT {{{
+	my $success;
+	my @vms = multiglob([list('VirtualMachine')], \@ARGV);
+	fatal('No VM\'s match the given pattern') unless scalar(@vms);
+	$title = $title || time;
+	foreach $vm (@vms) {
+		say(1, "Snapshot '$vm'");
+		pause() if $vmno++ and $success;
+		$success = 0;
+		my $vmref = getview('VirtualMachine', $vm) or fatal("Invalid virtual machine: $vm");
+		eval {
+			$vmref->CreateSnapshot(
+				name => $title,
+				description => 'VMM created snapshot',
+				memory => 0,
+				quiesce => 1,
+			) unless $dryrun;
+		};
+		if (@_) {
+			error('snapshot', $vm, @_);
+		} else {
+			$success = 1;
+		}
+	}
+# }}} SNAPSHOT
 } elsif ($cmd eq 'df') { # DF {{{
 	my @datastores = multiglob([list('Datastore')], \@ARGV);
 	fatal('No datastores match the given pattern') unless scalar(@datastores);
@@ -1012,14 +1062,14 @@ if ($cmd eq 'list') { # LIST {{{
 		print sprintf('%d', (($dsref->info->vmfs->capacity - $dsref->info->freeSpace) / $dsref->info->vmfs->capacity * 100)), "%$seperator";
 		print "\n";
 	}
-# }}}
+# }}} DF
 } elsif ($cmd eq 'version' or !$cmd) { # VERSION {{{
 	my $service = Vim::get_service_content();
 	print "vServer name: " . $service->about->fullName, "\n";
 	print "vServer OS: " . $service->about->osType . "\n";
 	print "API version: " . $service->about->apiVersion . " (build " . $service->about->build, ")\n";
 	print "Perl toolkit version: " . VMware::VIRuntime->VERSION . "\n";
-# }}}
+# }}} VERSION
 } else { # OTHER {{{
 	fatal("Unknown command: '$cmd'");
 # }}}
