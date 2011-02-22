@@ -1,5 +1,5 @@
 NAME
-    vmm - Handy tool to manage VMware virtual machines
+    vmm - Manage VMware virtual machines
 
 SYNOPSIS
             vmm <command> [options]
@@ -18,7 +18,7 @@ SYNOPSIS
                 vmm version
 
     Not yet implemented:
-                vmm clone [-c count] [-m max] [-d datastore...] <source vm> <target vm>
+                vmm clone [-c count] [-m max] [-a datastore...] <source vm> <target vm>
                 vmm logs <vms...>
                 vmm host [maintenance|restore|restart|shutdown] <hosts...>
                 vmm snapshot [-s name] <vms...>
@@ -29,10 +29,10 @@ COMMANDS
             Perlish way. e.g.: DB1, DB2, DB3 etc. Specify -m to specify at
             what point vmm should give up trying.
 
-            If -d is unspcified the datastore of the source VM is copied as
-            the new clones datastore. If -d is specified the data store will
-            be set during cloning. If -d contains a comma denoted list the
-            datastores will be alternated during cloning. e.g. -d 1,2 copies
+            If -a is unspcified the datastore of the source VM is copied as
+            the new clones datastore. If -a is specified the data store will
+            be set during cloning. If -a contains a comma denoted list the
+            datastores will be alternated during cloning. e.g. -a 1,2 copies
             to datastore 1 then 2 then starts again at 1.
 
     df      Display disk usage information about datastores. If a list of
@@ -95,7 +95,21 @@ OPTIONS
             DBS1, DBS2, DBS3... DBS10 DB00, DB01, DB02... DB99 DBAA, DBAB,
             DBAC,,, DBZZ
 
-    -d [datastore]
+    --display [col1,col2...]
+    -d [col1,col2...]
+
+            Used during: list
+            Default: Name
+            Type:
+                Command seperated list of columns to display in tabular
+                output when using the 'list' command. See also: -s to
+                specify the seperation character to use between the columns.
+
+            Specify a data store for operations that require it.
+
+    --datastore [datastore]
+    --ds [datastore]
+    -a [datastore]
 
             Used during: migrate
             Default: Same as source VM
@@ -137,8 +151,8 @@ OPTIONS
             attempts vmm should make before giving up attempting to find a
             free slot.
 
-    -n
     --dryrun
+    -n
 
             Used during: All operations
             Default: off
@@ -166,6 +180,16 @@ OPTIONS
             Type: Choice of: low, normal, high
 
             Specifies the priority when migrating VMs.
+
+    --seperator [character]
+    -s [character]
+
+            Used during: list
+            Default: \t (tab)
+            Type: String
+
+            Specifies the string to display between columns when outputing a
+            list.
 
     -v
     --verbose
@@ -238,6 +262,7 @@ CONFIG
             profile = Cluster1
             dryrun = 0
             human = 1
+            seperator = \t
         
             [Cluster1]
             url = https://cluster1.acme.edu
@@ -284,11 +309,17 @@ CONFIG
             trailing DNS name correcting 'host1.a.very.long.dns.com' to
             'host1'.
 
+    seperator
+            Specify the seperator character used when outputting tabular
+            data with the 'list' command.
+
     verbose Specify a default verbosity level. See -v for further
             information.
 
 BUGS
-    Quite probably. Please report to the author when found.
+    Quite probably.
+
+    Please report to https://github.com/hash-bang/VMM when found.
 
 AUTHOR
     Matt Carter <m@ttcarter.com>
