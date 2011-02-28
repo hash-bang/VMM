@@ -10,7 +10,7 @@ SYNOPSIS
     Command specific syntax:
                 vmm df [-h] [datastore...]
                 vmm host [maintenance|restore|restart|shutdown|disconnect|reconnect] <hosts...>
-                vmm list [-d col1,col2...] [vms|datastores|hosts|pool] [patterns...]
+                vmm list [-d col1,col2... | perl string] [-t title] [vms|datastores|hosts|pool] [patterns...]
                 vmm migrate [-p low|normal|high] [-o pool] <vms...> <host>
                 vmm move [-o pool] <vms...> <datastore>
                 vmm setpool <low|normal|high> <cpu|mem|all> <pools...>
@@ -43,6 +43,16 @@ COMMANDS
 
             Possible lists include (selection can be plural or singular): *
             vms (default if unspecified) * datastores * hosts * pools
+
+            If '-d' is specified without any containing '$' marks the string
+            is evaluated as a CSV with each line extracting the requisite
+            information that would be shown with the 'show' command. See the
+            EXAMPLES section for further information.
+
+            If '-d' is specified and contains a '$' it is evaluated as a
+            perl expression with $_ being set to the currently active item.
+
+            If '-t' is spcified the titles header for the table is set.
 
     migrate Migrate a given list of VMs to another host.
 
@@ -202,11 +212,12 @@ OPTIONS
     --title [title]
     -t [title]
 
-            Used during: snapshot
-            Default: The Unix EPOC
+            Used during: list, snapshot
+            Default: The Unix EPOC (for VMs)
             Type: String
 
-            The title of the snapshot to create.
+            The title of the snapshot to create or the title row of the list
+            table.
 
     -v
     --verbose
