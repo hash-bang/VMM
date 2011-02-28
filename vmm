@@ -16,6 +16,7 @@ vmm - Manage VMware virtual machines
 =item B<Command specific syntax:>
 
 	vmm df [-h] [datastore...]
+	vmm host [maintenance|restore|restart|shutdown|disconnect|reconnect] <hosts...>
 	vmm list [-d col1,col2...] [vms|datastores|hosts|pool] [patterns...]
 	vmm migrate [-p low|normal|high] [-o pool] <vms...> <host>
 	vmm move [-o pool] <vms...> <datastore>
@@ -29,7 +30,6 @@ vmm - Manage VMware virtual machines
 
 	vmm clone [-c count] [-m max] [-a datastore...] <source vm> <target vm>
 	vmm logs <vms...>
-	vmm host [maintenance|restore|restart|shutdown] <hosts...>
 
 =back
 
@@ -374,7 +374,7 @@ Specify multiple times to increase verbosity.
 =over
 
 =item B<Used during:>
-clone, migrate, setpool, state
+clone, host, migrate, setpool, state
 
 =item B<Default:>
 0
@@ -384,7 +384,7 @@ Number of seconds
 
 =back
 
-Force a wait for the specified number of seconds between VM operations.
+Force a wait for the specified number of seconds between operations.
 
 =back
 
@@ -807,7 +807,7 @@ fatal("No vServer URL specified for profile $profile") unless $cfg->exists($prof
 fatal("No vServer Username specified for profile $profile") unless $cfg->exists($profile, 'username');
 fatal("No vServer Password specified for profile $profile") unless $cfg->exists($profile, 'password');
 
-our $vmno = 0; # Offset of the VM we are operating on
+our $cycleno = 0; # Offset of the object we are operating on
 my @display;
 
 # Import various options from the config file. These can be overriden in the GetOptions call below.
@@ -870,22 +870,51 @@ if ($cmd eq 'list') { # LIST {{{
 	}
 	print "\n" if @list; # Insert final \n
 # }}} LIST
-} elsif ($cmd eq 'show') { # SHOW {{{
-	my $rawtype = $type = shift;
-	unless ($type = translate($type)) { # First arg is not a recognised type - assume the user is just listing VMs
-		unshift @ARGV, $rawtype; # Add back to pattern list
-		$type = 'VirtualMachine';
-		say(1, "No specific type requested. Assuming: 'vm'");
-	}
+} elsif ($cmd eq 'host') { # HOST {{{
+	my $operation = shift;
+	fatal('No operation specified. Choose: maintenance, restore, restart, shutdown, disconnect, reconnect') unless $state;
+	fatal('Invalid power state specified. Choose: maintenance, restore, restart, shutdown, disconnect, reconnect') unless $state =~ /^maintenance|restore|restart|shutdown|disconnect|reconnect$/;
 
-	my @items = multiglob([list($type)], \@ARGV);
-	foreach $item (@items) {
-		my %info = getinfo($type, $item);
-		print "$key = $val\n" while (($key, $val) = each %info);
-		print "\n";
+	my @hosts = multiglob([list('HostSystem')], \@ARGV);
+	fatal('No Hosts\'s match the given pattern') unless scalar(@hosts);
+	foreach $host (@hosts) {
+		pause() if $cycleno++;
+		my $hostref = getview('HostSystem', $host) or fatal("Invalid host: $host");
+		if ($operation eq 'disconnect') {
+			say(1, "Disconnecting host '$host'");
+			eval {
+				$hostref->DisconnectHost() unless $dryrun;
+			}
+		} elsif ($operation eq 'reconnect') {
+			say(1, "Reconnecting host '$host'");
+			eval {
+				$hostref->ReconnectHost() unless $dryrun;
+			}
+		} elsif ($operation eq 'maintenance') {
+			say(1, "Entering maintenance mode for host '$host'");
+			eval {
+				$hostref->EnterMaintenanceMode(timeout => 0) unless $dryrun;
+			}
+		} elsif ($operation eq 'restore') {
+			say(1, "Leaving maintenance mode for host '$host'");
+			eval {
+				$hostref->ExitMaintenanceMode(timeout => 0) unless $dryrun;
+			}
+		} elsif ($operation eq 'restart') {
+			say(1, "Restarting host '$host'");
+			eval {
+				$hostref->RebootHost(force => 1) unless $dryrun;
+			}
+		} elsif ($operation eq 'shutdown') {
+			say(1, "Shutdown host '$host'");
+			eval {
+				$hostref->ShutdownHost(force => 1) unless $dryrun;
+			}
+		}
+		error("host->$operation", $host, @_) if @_;
 	}
-# }}} SHOW
-} elsif ($cmd eq 'migrate') { # MIGRATE
+# }}} STATE
+} elsif ($cmd eq 'migrate') { # MIGRATE {{{
 	my $pool, $poolref, $priorityref;
 	fatal("Invalid priority: '$priority'. Choose from: low, normal, high") unless $priority =~ /^low|normal|high$/;
 	my $priorityref = VirtualMachineMovePriority->new($priority);
@@ -901,7 +930,7 @@ if ($cmd eq 'list') { # LIST {{{
 
 	say(2, "Migrating to $targethost with $priority priority");
 	foreach $vm (@vms) {
-		pause() if $vmno++;
+		pause() if $cycleno++;
 		say(1, "Migrate $vm -> $targethost");
 
 		my $vmref = getview('VirtualMachine', $vm) or fatal("Invalid VM: $vm");
@@ -932,7 +961,7 @@ if ($cmd eq 'list') { # LIST {{{
 
 	say(2, "Moving to datastore '$targetds'");
 	foreach $vm (@vms) {
-		pause() if $vmno++ and $success;
+		pause() if $cycleno++ and $success;
 		$success = 0;
 		say(1, "Move $vm -> $targetds");
 
@@ -965,7 +994,7 @@ if ($cmd eq 'list') { # LIST {{{
 	my @vms = multiglob([list('VirtualMachine')], \@ARGV);
 	fatal('No VM\'s match the given pattern') unless scalar(@vms);
 	foreach $vm (@vms) {
-		pause() if $vmno++;
+		pause() if $cycleno++;
 		my $vmref = getview('VirtualMachine', $vm) or fatal("Invalid virtual machine: $vm");
 		if ($state eq 'on') {
 			if ($vmref->runtime->powerState->val eq 'poweredOff') {
@@ -1010,7 +1039,7 @@ if ($cmd eq 'list') { # LIST {{{
 	my @pools = multiglob([list('ResourcePool')], \@ARGV);
 	fatal('No pools match the given pattern') unless scalar(@pools);
 	foreach $pool (@pools) {
-		pause() if $vmno++;
+		pause() if $cycleno++;
 		my $poolref = getview('ResourcePool', $pool);
 		fatal("Invalid resource pool: $pool") unless $poolref;
 
@@ -1030,6 +1059,21 @@ if ($cmd eq 'list') { # LIST {{{
 		$poolref->UpdateConfig(config => $config) unless $dryrun;
 	}
 # }}} DF
+} elsif ($cmd eq 'show') { # SHOW {{{
+	my $rawtype = $type = shift;
+	unless ($type = translate($type)) { # First arg is not a recognised type - assume the user is just listing VMs
+		unshift @ARGV, $rawtype; # Add back to pattern list
+		$type = 'VirtualMachine';
+		say(1, "No specific type requested. Assuming: 'vm'");
+	}
+
+	my @items = multiglob([list($type)], \@ARGV);
+	foreach $item (@items) {
+		my %info = getinfo($type, $item);
+		print "$key = $val\n" while (($key, $val) = each %info);
+		print "\n";
+	}
+# }}} SHOW
 } elsif ($cmd eq 'snapshot') { # SNAPSHOT {{{
 	my $success;
 	my @vms = multiglob([list('VirtualMachine')], \@ARGV);
@@ -1037,7 +1081,7 @@ if ($cmd eq 'list') { # LIST {{{
 	$title = $title || time;
 	foreach $vm (@vms) {
 		say(1, "Snapshot '$vm'");
-		pause() if $vmno++ and $success;
+		pause() if $cycleno++ and $success;
 		$success = 0;
 		my $vmref = getview('VirtualMachine', $vm) or fatal("Invalid virtual machine: $vm");
 		eval {
@@ -1055,6 +1099,13 @@ if ($cmd eq 'list') { # LIST {{{
 		}
 	}
 # }}} SNAPSHOT
+} elsif ($cmd eq 'version' or !$cmd) { # VERSION {{{
+	my $service = Vim::get_service_content();
+	print "vServer name: " . $service->about->fullName, "\n";
+	print "vServer OS: " . $service->about->osType . "\n";
+	print "API version: " . $service->about->apiVersion . " (build " . $service->about->build, ")\n";
+	print "Perl toolkit version: " . VMware::VIRuntime->VERSION . "\n";
+# }}} VERSION
 } elsif ($cmd eq 'df') { # DF {{{
 	my @datastores = multiglob([list('Datastore')], \@ARGV);
 	fatal('No datastores match the given pattern') unless scalar(@datastores);
@@ -1071,13 +1122,6 @@ if ($cmd eq 'list') { # LIST {{{
 		print "\n";
 	}
 # }}} DF
-} elsif ($cmd eq 'version' or !$cmd) { # VERSION {{{
-	my $service = Vim::get_service_content();
-	print "vServer name: " . $service->about->fullName, "\n";
-	print "vServer OS: " . $service->about->osType . "\n";
-	print "API version: " . $service->about->apiVersion . " (build " . $service->about->build, ")\n";
-	print "Perl toolkit version: " . VMware::VIRuntime->VERSION . "\n";
-# }}} VERSION
 } else { # OTHER {{{
 	fatal("Unknown command: '$cmd'");
 # }}}
