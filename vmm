@@ -17,7 +17,7 @@ vmm - Manage VMware virtual machines
 
 	vmm df [-h] [datastore...]
 	vmm host [maintenance|restore|restart|shutdown|disconnect|reconnect] <hosts...>
-	vmm list [-d col1,col2...] [vms|datastores|hosts|pool] [patterns...]
+	vmm list [-d col1,col2... | perl string] [-t title] [vms|datastores|hosts|pool] [patterns...]
 	vmm migrate [-p low|normal|high] [-o pool] <vms...> <host>
 	vmm move [-o pool] <vms...> <datastore>
 	vmm setpool <low|normal|high> <cpu|mem|all> <pools...>
@@ -59,6 +59,12 @@ Possible lists include (selection can be plural or singular):
 * datastores
 * hosts
 * pools
+
+If '-d' is specified without any containing '$' marks the string is evaluated as a CSV with each line extracting the requisite information that would be shown with the 'show' command. See the EXAMPLES section for further information.
+
+If '-d' is specified and contains a '$' it is evaluated as a perl expression with $_ being set to the currently active item.
+
+If '-t' is spcified the titles header for the table is set.
 
 =item B<migrate>
 
@@ -335,17 +341,17 @@ Specifies the string to display between columns when outputing a list.
 =over
 
 =item B<Used during:>
-snapshot
+list, snapshot
 
 =item B<Default:>
-The Unix EPOC
+The Unix EPOC (for VMs)
 
 =item B<Type:>
 String
 
 =back
 
-The title of the snapshot to create.
+The title of the snapshot to create or the title row of the list table.
 
 =item B<-v>
 
@@ -711,12 +717,13 @@ sub getvminfo {
 
 sub getdsinfo {
 	my $ds = shift;
+	our $human;
 	my $view = getview('Datastore', $ds) or fatal("Unknown datastore: '$ds'");
 	my %info = (
 		name => $view->name,
-		size => $view->info->vmfs->capacity,
-		used => $view->info->vmfs->capacity - $view->info->freeSpace,
-		free => $view->info->freeSpace,
+		size => ($human ? format_bytes($view->info->vmfs->capacity) : $view->info->vmfs->capacity),
+		used => ($human ? format_bytes($view->info->vmfs->capacity - $view->info->freeSpace) : $view->info->vmfs->capacity - $view->info->freeSpace),
+		free => ($human ? format_bytes($view->info->freeSpace) : $view->info->freeSpace),
 		percent => sprintf('%d', (($view->info->vmfs->capacity - $view->info->freeSpace) / $view->info->vmfs->capacity * 100)),
 	);
 	return %info;
@@ -808,15 +815,15 @@ fatal("No vServer Username specified for profile $profile") unless $cfg->exists(
 fatal("No vServer Password specified for profile $profile") unless $cfg->exists($profile, 'password');
 
 our $cycleno = 0; # Offset of the object we are operating on
-my @display;
 
 # Import various options from the config file. These can be overriden in the GetOptions call below.
 our $dryrun = $cfg->val($profile, 'dryrun', 0);
 our $wait = $cfg->val($profile, 'wait', 0);
+our $human = $cfg->val($profile, 'human', '0');
 my $priority = $cfg->val($profile, 'priority', 'low');
-my $human = $cfg->val($profile, 'human', '0');
 my $seperator = $cfg->val($profile, 'seperator', "\t");
 my $title;
+my $display;
 Opts::set_option('url', $cfg->val($profile, 'url'));
 Opts::set_option('username', $cfg->val($profile, 'username'));
 Opts::set_option('password', $cfg->val($profile, 'password'));
@@ -835,38 +842,61 @@ GetOptions(
 	'priority|p=s' => \$priority,
 	'pool|o=s' => \$pool,
 	'human|h' => \$human,
-	'display|d=s' => \@display,
+	'display|d=s' => \$display,
 	'seperator|s=s' => \$seperator,
 	'title|t=s' => \$title,
 );
 
-# Post-processing options
-@display = split(/,/,join(',',@display)); # Split 'display' CSV option
-
 my $cmd = shift; # Extract what command we should work with
 # }}} Command line options loading
+
+if ($cmd eq 'df') { # DF {{{
+	# DF is really just a lazy way of configuring the 'list' command
+	$cmd = 'list';
+	$display = '$_{name}\t$_{size}\t$_{used}\t$_{free}\t$_{percent}%';
+	$title = 'Name\tSize\tUsed\tFree\t%';
+	@ARGV = ('datastore');
+} # }}}
 
 if ($cmd eq 'list') { # LIST {{{
 	my $type = shift || 'vm';
 	my $type = translate($type) or fatal("Unknown list type: '$type'");
+	my @displaylist;
+	my $displaytype = 0; # 0 - Plain list, 1 - CSV list, 2 - Perl string eval
+	if ($display =~ /\$/) { # Contains a '$' - assume Perl eval
+		$displaytype = 2;
+	} elsif ($display) {
+		@displaylist = split(',',$display); # Split 'display' CSV option
+		print Dumper(@displaylist);
+		$displaytype = 1;
+	}
+
+	say(0, eval("return \"$title\"")) if ($title);
 
 	my @list = multiglob([list($type)], \@ARGV);
-	if (@display) { # Custom output format
-		foreach $type (@display) { # Print headers
-			print "$type$seperator";
+	if ($displaytype == 0) { # No custom format - just dump list
+		print join "\n", @list;
+	} elsif ($displaytype == 1) { # CSV style extract
+		unless ($title) {
+			foreach $type (@displaylist) { # Print headers
+				print "$type$seperator";
+			}
 		}
 		print "\n";
 		foreach $item (@list) {
 			my %info = getinfo($type, $item) or fatal("Dont know how to retrieve info for type '$type'");
 			my $line = '';
-			foreach $type (@display) {
+			foreach $type (@displaylist) {
 				$line .= ($info{$type} ? $info{$type} : 'UNKNOWN') . $seperator;
 			}
 			$line = substr($line, 0, 0 - length($seperator)); # Stip last $seperator
 			print "$line\n";
 		}
-	} else { # No custom format - just dump list
-		print join "\n", @list;
+	} elsif ($displaytype == 2) { # Perl eval
+		foreach $name (@list) {
+			%_ = getinfo($type, $name) or fatal("Dont know how to retrieve info for type '$type'");
+			print eval("return \"$display\"") . "\n";
+		}
 	}
 	print "\n" if @list; # Insert final \n
 # }}} LIST
@@ -1106,22 +1136,6 @@ if ($cmd eq 'list') { # LIST {{{
 	print "API version: " . $service->about->apiVersion . " (build " . $service->about->build, ")\n";
 	print "Perl toolkit version: " . VMware::VIRuntime->VERSION . "\n";
 # }}} VERSION
-} elsif ($cmd eq 'df') { # DF {{{
-	my @datastores = multiglob([list('Datastore')], \@ARGV);
-	fatal('No datastores match the given pattern') unless scalar(@datastores);
-
-	print "Name{$seperator}Size{$seperator}Used{$seperator}Avail{$seperator}Use%\n";
-
-	foreach $ds (@datastores) {
-		my $dsref = getview('Datastore', $ds) or fatal("Invalid datastore: $ds");
-		print $dsref->info->vmfs->name . $seperator;
-		print $human ? format_bytes($dsref->info->vmfs->capacity) : $dsref->info->vmfs->capacity, $seperator;
-		print $human ? format_bytes($dsref->info->vmfs->capacity - $dsref->info->freeSpace) : ($dsref->info->vmfs->capacity - $dsref->info->freeSpace), $seperator;
-		print $human ? format_bytes($dsref->info->freeSpace) : $dsref->info->freeSpace, $seperator;
-		print sprintf('%d', (($dsref->info->vmfs->capacity - $dsref->info->freeSpace) / $dsref->info->vmfs->capacity * 100)), "%$seperator";
-		print "\n";
-	}
-# }}} DF
 } else { # OTHER {{{
 	fatal("Unknown command: '$cmd'");
 # }}}
