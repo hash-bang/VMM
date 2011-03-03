@@ -8,6 +8,7 @@ SYNOPSIS
                 vmm <command> [-f] [-v+] [-w seconds] [@profile]
 
     Command specific syntax:
+                vmm clone [-o pool] [-c count] [-a datastore...] <source vm> <new vm name>
                 vmm df [-h] [datastore...]
                 vmm host [maintenance|restore|restart|shutdown|disconnect|reconnect] <hosts...>
                 vmm list [-d col1,col2... | perl string] [-t title] [vms|datastores|hosts|pool] [patterns...]
@@ -15,25 +16,21 @@ SYNOPSIS
                 vmm move [-o pool] <vms...> <datastore>
                 vmm setpool <low|normal|high> <cpu|mem|all> <pools...>
                 vmm show [vm|datastore|host|pool] [vms...]
-                vmm snapshot [--t title] <vms...>
+                vmm snapshot [-t title] <vms...>
                 vmm state <on|off|suspend|reboot|shutdown|restart|standby> <vms...>
                 vmm version
-
-    Not yet implemented:
-                vmm clone [-c count] [-m max] [-a datastore...] <source vm> <target vm>
-                vmm logs <vms...>
 
 COMMANDS
     clone   Clone a given VM to another VM name. If -c is specified multiple
             copies are made. Each VM name will be incremented in the usual
-            Perlish way. e.g.: DB1, DB2, DB3 etc. Specify -m to specify at
-            what point vmm should give up trying.
+            Perlish way. e.g.: DB1, DB2, DB3 etc.
 
             If -a is unspcified the datastore of the source VM is copied as
             the new clones datastore. If -a is specified the data store will
             be set during cloning. If -a contains a comma denoted list the
             datastores will be alternated during cloning. e.g. -a 1,2 copies
-            to datastore 1 then 2 then starts again at 1.
+            to datastore 1 then 2 then starts again at 1. Patterns of
+            repeating datastores can be specified - e.g. '-a 1,2,3,2,1'.
 
     df      Display disk usage information about datastores. If a list of
             matches is provided, the data store list is filtered for those
@@ -106,9 +103,8 @@ OPTIONS
             Type: Number
 
             Specifies how many VMs should be created during a clone
-            operation. If more than one the target VM name is incremented a
-            maximum number of times specified by the -m flag. The name of
-            the target VM is incremented in the usual Perlish way. e.g.
+            operation. The name of the target VM is incremented in the usual
+            Perlish way. e.g.
 
             DBS1, DBS2, DBS3... DBS10 DB00, DB01, DB02... DB99 DBAA, DBAB,
             DBAC,,, DBZZ
@@ -155,19 +151,6 @@ OPTIONS
 
             Display the numbers of the 'df' command in a human readable
             format.
-
-    -m
-
-            Used during: clone
-            Default: 99
-            Type: Number
-
-            Specify the maximum number of incremental names to try before
-            giving up. When using the -c flag during a migrate operation vmm
-            trys to find a free target VM name by incrementing the default
-            name given by the user (see -c). This flag specifies how many
-            attempts vmm should make before giving up attempting to find a
-            free slot.
 
     --dryrun
     -n
