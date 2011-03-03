@@ -15,7 +15,7 @@ SYNOPSIS
                 vmm migrate [-p low|normal|high] [-o pool] <vms...> <host>
                 vmm move [-o pool] <vms...> <datastore>
                 vmm setpool <low|normal|high> <cpu|mem|all> <pools...>
-                vmm show [vm|datastore|host|pool] [vms...]
+                vmm show [vm|datastore|host|pool] [items...]
                 vmm snapshot [-t title] <vms...>
                 vmm state <on|off|suspend|reboot|shutdown|restart|standby> <vms...>
                 vmm version
@@ -227,14 +227,6 @@ DESCRIPTION
     (VM).
 
 EXAMPLES
-    vmm migrate DBS* Carl
-        Migrate all virtual machines matching 'DBS*' to the 'Carl' host.
-
-    vmm migrate DBS* Lenny -w 60 -o Active -p high
-        Migrate all virtual machines matching 'DBS*' with high priority to
-        the 'Active' pool on the 'Lenny' host waiting 60 seconds between
-        machine.
-
     vmm clone VM01 VM02
         Clone VM01 to VM02. Since neither the datasource (-d) or pool (-o)
         is specified these details are copied from VM01.
@@ -248,9 +240,39 @@ EXAMPLES
         Same as the above example but spread the datastores across SAN1 and
         SAN2 and move the machine to the 'Active' pool.
 
+    vmm df *2
+        Display a datastore usage sheet (similar to the Unix 'df' command)
+        for all datastores ending in '2'.
+
+    vmm host maintenance Moe Homer
+        Put the hosts 'Moe' and 'Homer' into maintenance mode (use 'restore'
+        to recover from this).
+
+    vmm list vms
+        List all VMs.
+
+    vmm list vms -d name,host,ip
+        List all VMs - showing their name, currently allocated host and IP
+        address.
+
+    vmm migrate DBS* Carl
+        Migrate all virtual machines matching 'DBS*' to the 'Carl' host.
+
+    vmm migrate DBS* Lenny -w 60 -o Active -p high
+        Migrate all virtual machines matching 'DBS*' with high priority to
+        the 'Active' pool on the 'Lenny' host waiting 60 seconds between
+        machine.
+
     vmm move DB00 DB01 SAN2 @cluster2
         Move VMs DB00 and DB01 to the SAN2 datastore within profile
         'cluster2'.
+
+    vmm show host Lisa
+        Show information on host 'Lisa'.
+
+    vmm snapshot DB04 DB05 -t 'Todays backup'
+        Take a snapshot of VMs 'DB04' and 'DB05' using the title 'Todays
+        backup'
 
     vmm state on DB00 DB01 -w 30
         Turn DB00 and DB01 on waiting 30 seconds between machines.
@@ -281,7 +303,7 @@ CONFIG
             password = password
         
             [Cluster2]
-            url = https://cluster2.acme.edu.au
+            url = https://cluster2.acme.edu
             username = administrator
             password = changeme
 
