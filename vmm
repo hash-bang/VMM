@@ -15,6 +15,7 @@ vmm - Manage VMware virtual machines
 
 =item B<Command specific syntax:>
 
+	vmm clone [-o pool] [-c count] [-a datastore...] <source vm> <new vm name>
 	vmm df [-h] [datastore...]
 	vmm host [maintenance|restore|restart|shutdown|disconnect|reconnect] <hosts...>
 	vmm list [-d col1,col2... | perl string] [-t title] [vms|datastores|hosts|pool] [patterns...]
@@ -22,14 +23,9 @@ vmm - Manage VMware virtual machines
 	vmm move [-o pool] <vms...> <datastore>
 	vmm setpool <low|normal|high> <cpu|mem|all> <pools...>
 	vmm show [vm|datastore|host|pool] [vms...]
-	vmm snapshot [--t title] <vms...>
+	vmm snapshot [-t title] <vms...>
 	vmm state <on|off|suspend|reboot|shutdown|restart|standby> <vms...>
 	vmm version
-
-=item B<Not yet implemented:>
-
-	vmm clone [-c count] [-m max] [-a datastore...] <source vm> <target vm>
-	vmm logs <vms...>
 
 =back
 
@@ -40,10 +36,10 @@ vmm - Manage VMware virtual machines
 =item B<clone>
 
 Clone a given VM to another VM name.
-If -c is specified multiple copies are made. Each VM name will be incremented in the usual Perlish way. e.g.: DB1, DB2, DB3 etc. Specify -m to specify at what point vmm should give up trying.
+If -c is specified multiple copies are made. Each VM name will be incremented in the usual Perlish way. e.g.: DB1, DB2, DB3 etc.
 
 If -a is unspcified the datastore of the source VM is copied as the new clones datastore.
-If -a is specified the data store will be set during cloning. If -a contains a comma denoted list the datastores will be alternated during cloning. e.g. -a 1,2 copies to datastore 1 then 2 then starts again at 1.
+If -a is specified the data store will be set during cloning. If -a contains a comma denoted list the datastores will be alternated during cloning. e.g. -a 1,2 copies to datastore 1 then 2 then starts again at 1. Patterns of repeating datastores can be specified - e.g. '-a 1,2,3,2,1'.
 
 =item B<df>
 
@@ -150,7 +146,6 @@ Number
 =back
 
 Specifies how many VMs should be created during a clone operation.
-If more than one the target VM name is incremented a maximum number of times specified by the -m flag.
 The name of the target VM is incremented in the usual Perlish way.
 e.g.
 
@@ -237,25 +232,6 @@ Switch
 =back
 
 Display the numbers of the 'df' command in a human readable format.
-
-=item B<-m>
-
-=over
-
-=item B<Used during:>
-clone
-
-=item B<Default:>
-99
-
-=item B<Type:>
-Number
-
-=back
-
-Specify the maximum number of incremental names to try before giving up.
-When using the -c flag during a migrate operation vmm trys to find a free target VM name by incrementing the default name given by the user (see -c).
-This flag specifies how many attempts vmm should make before giving up attempting to find a free slot.
 
 =item B<--dryrun>
 
@@ -693,6 +669,7 @@ sub getvminfo {
 		host => Vim::get_view(mo_ref => $view->runtime->host)->name,
 		state => $view->runtime->powerState->val eq 'poweredOn' ? 'on' : 'off',
 		tools => $view->guest->toolsStatus->val eq 'toolsOk' ? 'yes' : 'no',
+		folder => $view->parent->name,
 		ip => 'UNKNOWN',
 		mac => 'UNKNOWN',
 	);
@@ -824,6 +801,9 @@ my $priority = $cfg->val($profile, 'priority', 'low');
 my $seperator = $cfg->val($profile, 'seperator', "\t");
 my $title;
 my $display;
+my $pool;
+my $count = 1;
+my $datastore;
 Opts::set_option('url', $cfg->val($profile, 'url'));
 Opts::set_option('username', $cfg->val($profile, 'username'));
 Opts::set_option('password', $cfg->val($profile, 'password'));
@@ -839,12 +819,14 @@ GetOptions(
 	'wait|w=i' => \$wait,
 
 	# Specific command options
+	'count|c=i' => \$count,
 	'priority|p=s' => \$priority,
 	'pool|o=s' => \$pool,
 	'human|h' => \$human,
 	'display|d=s' => \$display,
 	'seperator|s=s' => \$seperator,
 	'title|t=s' => \$title,
+	'datastore|ds|a=s' => \$datastore,
 );
 
 my $cmd = shift; # Extract what command we should work with
@@ -854,11 +836,69 @@ if ($cmd eq 'df') { # DF {{{
 	# DF is really just a lazy way of configuring the 'list' command
 	$cmd = 'list';
 	$display = '$_{name}\t$_{size}\t$_{used}\t$_{free}\t$_{percent}%';
-	$title = 'Name\tSize\tUsed\tFree\t%';
-	@ARGV = ('datastore');
+	$title = 'Name,Size,Used,Free,%';
+	unshift @ARGV, 'datastore';
 } # }}}
+if ($cmd eq 'clone') { # CLONE {{{
+	my $poolref, $priorityref;
+	fatal("Invalid priority: '$priority'. Choose from: low, normal, high") unless $priority =~ /^low|normal|high$/;
+	my $priorityref = VirtualMachineMovePriority->new($priority);
 
-if ($cmd eq 'list') { # LIST {{{
+	my $source = shift;
+	my $target = shift;
+	my $sourceref = getview('VirtualMachine', $source) or fatal("Invalid source VM: '$source'");
+	my $sourcehost = getview('Mor', $sourceref->runtime->host) or fatal("Invalid host for VM '$source'");
+	my @dsrefs;
+
+	if ($pool) { # Requesting a specific pool
+		say(2, "Using pool '$pool'");
+		$poolref = getview('ResourcePool', $pool) or fatal("Invalid destination pool: $pool");
+	} else { # Copy pool from source
+		$poolref = $sourceref->resourcePool;
+	}
+	if ($datastore) { # User is specifying pattern of datastores
+		foreach (split(',', $datastore)) {
+			say(2, "Loading datastore '$_'");
+			my $dsref = getview('Datastore', $_) or fatal("Unknown datastore: '$_'");
+			push @dsrefs, $dsref;
+		}
+	} else { # No DS preferences set - use default clone DS
+		push @dsrefs, getview('Mor', $sourceref->datastore->[0]);
+	}
+
+	say(1, "Clone source $source (x $count clones, across " . scalar(@dsrefs) ." datastores)");
+
+	while ($cycleno < $count) {
+		pause() if $cycleno++;
+		while (getview('VirtualMachine', $target)) {
+			say(1, "VM '$target' already exists. Trying next slot");
+			$target++;
+		}
+
+		say(1, "Cloning $source -> $target (clone #$cycleno, DS " . $dsrefs[$dsno]->name . ")");
+
+		eval {
+			$sourceref->CloneVM(
+				folder => $sourceref->parent,
+				name => $target,
+				spec => VirtualMachineCloneSpec->new(
+					powerOn => 0,
+					template => 0,
+					location => VirtualMachineRelocateSpec->new(
+						datastore => $dsrefs[$dsno],
+						host => $sourcehost,
+						pool => $poolref,
+					)
+				)
+			) unless $dryrun;
+		};
+		error('clone', $source, @_) if @_;
+
+		$dsno = 0 if ++$dsno > scalar(@dsrefs)-1; # Move though selected datastores
+		$target++;
+	}
+# }}} CLONE
+} elsif ($cmd eq 'list') { # LIST {{{
 	my $type = shift || 'vm';
 	my $type = translate($type) or fatal("Unknown list type: '$type'");
 	my @displaylist;
@@ -871,7 +911,10 @@ if ($cmd eq 'list') { # LIST {{{
 		$displaytype = 1;
 	}
 
-	say(0, eval("return \"$title\"")) if ($title);
+	if ($title) { # Output a title
+		$title =~ s/,/$seperator/g;
+		say(0, $title);
+	}
 
 	my @list = multiglob([list($type)], \@ARGV);
 	if ($displaytype == 0) { # No custom format - just dump list
@@ -943,9 +986,9 @@ if ($cmd eq 'list') { # LIST {{{
 		}
 		error("host->$operation", $host, @_) if @_;
 	}
-# }}} STATE
+# }}} HOST
 } elsif ($cmd eq 'migrate') { # MIGRATE {{{
-	my $pool, $poolref, $priorityref;
+	my $poolref, $priorityref;
 	fatal("Invalid priority: '$priority'. Choose from: low, normal, high") unless $priority =~ /^low|normal|high$/;
 	my $priorityref = VirtualMachineMovePriority->new($priority);
 
@@ -1088,7 +1131,7 @@ if ($cmd eq 'list') { # LIST {{{
 		my $config = ResourceConfigSpec->new(cpuAllocation=>$cpualloc, memoryAllocation=>$memalloc);
 		$poolref->UpdateConfig(config => $config) unless $dryrun;
 	}
-# }}} DF
+# }}} SETPOOL
 } elsif ($cmd eq 'show') { # SHOW {{{
 	my $rawtype = $type = shift;
 	unless ($type = translate($type)) { # First arg is not a recognised type - assume the user is just listing VMs
