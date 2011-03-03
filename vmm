@@ -22,7 +22,7 @@ vmm - Manage VMware virtual machines
 	vmm migrate [-p low|normal|high] [-o pool] <vms...> <host>
 	vmm move [-o pool] <vms...> <datastore>
 	vmm setpool <low|normal|high> <cpu|mem|all> <pools...>
-	vmm show [vm|datastore|host|pool] [vms...]
+	vmm show [vm|datastore|host|pool] [items...]
 	vmm snapshot [-t title] <vms...>
 	vmm state <on|off|suspend|reboot|shutdown|restart|standby> <vms...>
 	vmm version
@@ -378,14 +378,6 @@ A command line tool for the manipulation of VMware Virtual Machines (VM).
 
 =over
 
-=item B<vmm migrate DBS* Carl>
-
-Migrate all virtual machines matching 'DBS*' to the 'Carl' host.
-
-=item B<vmm migrate DBS* Lenny -w 60 -o Active -p high>
-
-Migrate all virtual machines matching 'DBS*' with high priority to the 'Active' pool on the 'Lenny' host waiting 60 seconds between machine.
-
 =item B<vmm clone VM01 VM02>
 
 Clone VM01 to VM02.
@@ -400,9 +392,41 @@ Since neither the datasource (-d) or pool (-o) is specified these details are co
 
 Same as the above example but spread the datastores across SAN1 and SAN2 and move the machine to the 'Active' pool.
 
+=item B<vmm df *2>
+
+Display a datastore usage sheet (similar to the Unix 'df' command) for all datastores ending in '2'.
+
+=item B<vmm host maintenance Moe Homer>
+
+Put the hosts 'Moe' and 'Homer' into maintenance mode (use 'restore' to recover from this).
+
+=item B<vmm list vms>
+
+List all VMs.
+
+=item B<vmm list vms -d name,host,ip>
+
+List all VMs - showing their name, currently allocated host and IP address.
+
+=item B<vmm migrate DBS* Carl>
+
+Migrate all virtual machines matching 'DBS*' to the 'Carl' host.
+
+=item B<vmm migrate DBS* Lenny -w 60 -o Active -p high>
+
+Migrate all virtual machines matching 'DBS*' with high priority to the 'Active' pool on the 'Lenny' host waiting 60 seconds between machine.
+
 =item B<vmm move DB00 DB01 SAN2 @cluster2>
 
 Move VMs DB00 and DB01 to the SAN2 datastore within profile 'cluster2'.
+
+=item B<vmm show host Lisa>
+
+Show information on host 'Lisa'.
+
+=item B<vmm snapshot DB04 DB05 -t 'Todays backup'>
+
+Take a snapshot of VMs 'DB04' and 'DB05' using the title 'Todays backup'
 
 =item B<vmm state on DB00 DB01 -w 30>
 
@@ -444,7 +468,7 @@ The layout of the config file spcifies which profiles to use.
 	password = password
 	
 	[Cluster2]
-	url = https://cluster2.acme.edu.au
+	url = https://cluster2.acme.edu
 	username = administrator
 	password = changeme
 
@@ -840,9 +864,7 @@ if ($cmd eq 'df') { # DF {{{
 	unshift @ARGV, 'datastore';
 } # }}}
 if ($cmd eq 'clone') { # CLONE {{{
-	my $poolref, $priorityref;
-	fatal("Invalid priority: '$priority'. Choose from: low, normal, high") unless $priority =~ /^low|normal|high$/;
-	my $priorityref = VirtualMachineMovePriority->new($priority);
+	my $poolref;
 
 	my $source = shift;
 	my $target = shift;
