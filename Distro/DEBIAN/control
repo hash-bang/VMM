@@ -1,0 +1,10 @@
+Package: vmm
+Source: vmm
+Version: $VERSION
+Architecture: any
+Maintainer: Matt Carter <m@ttcarter.com>
+Depends: perl (>= 5.10.0)
+Section: utils
+Priority: optional
+Homepage: https://github.com/hash-bang/VMM
+Description: Small applet to Manage VMware virtual machines
