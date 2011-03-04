@@ -1,0 +1,17 @@
+[GLOBAL]
+rewrite host = s/^(.+?)\./\1/
+verbose = 2
+profile = Cluster1
+dryrun = 0
+human = 1
+seperator = \t
+
+[Cluster1]
+url = https://cluster1.acme.edu
+username = admin
+password = password
+
+[Cluster2]
+url = https://cluster2.acme.edu
+username = administrator
+password = changeme

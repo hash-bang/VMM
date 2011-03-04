@@ -20,8 +20,9 @@ clean:
 
 deb:
 	mkdir $(DEBFACTORY)
-	mkdir -p $(DEBFACTORY)/usr/bin $(DEBFACTORY)/usr/share/man
+	mkdir -p $(DEBFACTORY)/usr/bin $(DEBFACTORY)/usr/share/man $(DEBFACTORY)/usr/share/doc/vmm
 	cp -a vmm $(DEBFACTORY)/usr/bin
+	cp -a docs/vmmrc.example $(DEBFACTORY)/usr/share/doc/vmm
 	cp -ar Distro/DEBIAN $(DEBFACTORY)
 	perl -pi -e 's/\$$VERSION/$(VERSION)/' $(DEBFACTORY)/DEBIAN/control
 	pod2man vmm $(DEBFACTORY)/usr/share/man/vmm.1
