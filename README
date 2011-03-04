@@ -89,12 +89,26 @@ OPTIONS
 
             Used during: All operations
             Default: First specified profile in config
-            Type: Profile name
+            Type: Profile name or URL
 
-            Specifies which profile to use when addressing the vServer. e.g.
-            vmm version @cluster1 OR vmm version @cluster2
+            Specifies which profile to use when addressing the vServer. This
+            can be an entry within the config file or the URL (with optional
+            login details) e.g.
 
-            Switches between the two profiles setup in the VMM config file
+                    vmm version @cluster1
+                    vmm version @cluster2
+                    vmm version @https://cluster1.acme.edu
+                    vmm version @https://username@cluster1.acme.edu
+                    vmm version @https://username:password@cluster1.acme.edu
+
+            Examples 1 and two assume 'custer1' and 'customer2' have been
+            defined in the examples file (see EXAMPLES). The further
+            examples specify the connection information on the command line.
+            Specifying the password from the command line is exceptionally
+            silly and should be avoided.
+
+            If username and/or password is omitted (such as in examples 3
+            and 4 above) they will be prompted for when vmm is run.
 
     -c
 
