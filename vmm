@@ -569,7 +569,7 @@ sub say {
 	# Print a message to STDERR based on the verbosity level
 	our $verbose;
 	my $verbosity = shift;
-	print STDERR @_, "\n";
+	print STDERR @_, "\n" if ($verbose >= $verbosity);
 }
 
 sub pause {
