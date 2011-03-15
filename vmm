@@ -530,6 +530,24 @@ Specify a default verbosity level. See B<-v> for further information.
 
 =back
 
+=head1 INSTALLATION
+
+VMM requires a few external modules before it can work correctly. Follow the following stages to get everything working.
+
+* Install the VMware Perl SDK from http://www.vmware.com/support/developer/viperltoolkit/
+
+* Install all the required CPAN modules
+	
+	cpan Config::IniFiles Getopt::Long Number::Bytes::Human Term::ReadKey Text::Glob
+
+* Setup the config file. See either the CONFIG section above or use the sample file from /usr/share/doc/vmm
+
+* Run VMM with a simple command to make sure everything is setup right.
+
+	vmm version
+
+* Enjoy
+
 =head1 BUGS
 
 Quite probably.
