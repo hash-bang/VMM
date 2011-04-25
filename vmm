@@ -477,6 +477,8 @@ The layout of the config file spcifies which profiles to use.
 	human = 1
 	force = 0
 	seperator = \t
+	http_proxy = http://myproxy.example.com:8080
+	https_proxy = http://myproxy.example.com:8080
 	
 	[Cluster1]
 	url = https://cluster1.acme.edu
@@ -515,6 +517,13 @@ Specify a default dry run value. See B<-n> for further information.
 =item B<force>
 
 If an error is encounted during a multiple VM operation the default behaviour is to stop execution. If this setting is set to '1' this behaviour will be overridden and operations will continue even if an error is encounted.
+
+=item B<http_proxy>
+
+=item B<https_proxy>
+
+Forceably set the HTTP(s)_PROXY environment variable to the provided value before connecting.
+This is included to assist basic login shells where these variables are not imported correctly.
 
 =item B<human>
 
@@ -893,6 +902,16 @@ my $priority = $cfg->val($profile, 'priority', 'low');
 my $seperator = $cfg->val($profile, 'seperator', "\t");
 my $title, $display, $pool, $datastore;
 my $count = 1;
+
+if (my $_ = $cfg->val($profile, 'http_proxy')) {
+	say(1, "Forceably importing HTTP_PROXY as '$_'");
+	$ENV{HTTP_PROXY} = $_;
+}
+if (my $_ = $cfg->val($profile, 'https_proxy')) {
+	say(1, "Forceably importing HTTPS_PROXY as '$_'");
+	$ENV{HTTPS_PROXY} = $_;
+}
+
 Opts::set_option('url', $cfg->val($profile, 'url'));
 Opts::set_option('username', $cfg->val($profile, 'username'));
 Opts::set_option('password', $cfg->val($profile, 'password'));
