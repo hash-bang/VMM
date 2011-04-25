@@ -72,16 +72,15 @@ COMMANDS
 
     state   Set the state of a list of VMs.
 
-            This can be any of the following choices: * on - Power up the
-            specified VMs * off - Power down the specified VMs. This is a
-            hard power state so data loss could occur. * suspend - Power the
-            machine into standby mode. This is a hard power state which does
-            not rely on VMware tools. * restart - Hard power cycle the VMs.
-            Like 'off' this is a forced power state so data loss could
-            occur. * shutdown - Try shutting down the machine via VMware
-            tools. * standby - Try to put the machine into the soft standby
-            state. * reboot - Try shutting down the machine via VMware
-            tools.
+            This can be any of the following choices:
+
+                    on - Power up the specified VMs
+                    off - Power down the specified VMs. This is a hard power state so data loss could occur.
+                    suspend - Power the machine into standby mode. This is a hard power state which does not rely on VMware tools.
+                    restart - Hard power cycle the VMs. Like 'off' this is a forced power state so data loss could occur.
+                    shutdown - Try shutting down the machine via VMware tools.
+                    standby - Try to put the machine into the soft standby state.
+                    reboot - Try shutting down the machine via VMware tools.
 
     version Display various version informaiton about the connected vServer
             and local API. This command is the default if no actual command
