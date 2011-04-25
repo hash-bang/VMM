@@ -1,4 +1,5 @@
 #!/usr/bin/perl
+# POD {{{
 =head1 NAME
 
 vmm - Manage VMware virtual machines
@@ -202,6 +203,8 @@ Datastore name
 
 Specify a data store for operations that require it.
 
+=item B<--force>
+
 =item B<-f>
 
 =over
@@ -218,8 +221,8 @@ Switch
 =back
 
 Force continue if an error occurs.
-Normaly if an error occurs vmm will stop processing any further VMs specified on the command line.
-If this flag is enabled vmm will instead continue operation as if no error occured.
+Normaly if an error occurs vmm will stop processing any operations specified on the command line.
+If this flag is enabled vmm will continue operation as if no error occured.
 
 =item B<--human>
 
@@ -439,6 +442,11 @@ Take a snapshot of VMs 'DB04' and 'DB05' using the title 'Todays backup'
 
 Turn DB00 and DB01 on waiting 30 seconds between machines.
 
+=item B<vmm state on DB00 DB01 -w 30 -f>
+
+Turn DB* VMs on.
+-f ensures that even if any of the machines fail to turn on for any reason the remaining machines will still be sent the 'on' command.
+
 =back
 
 =head1 FILES
@@ -467,6 +475,7 @@ The layout of the config file spcifies which profiles to use.
 	profile = Cluster1
 	dryrun = 0
 	human = 1
+	force = 0
 	seperator = \t
 	
 	[Cluster1]
@@ -502,6 +511,10 @@ The authentication information when connecting to the vServer.
 =item B<dryrun>
 
 Specify a default dry run value. See B<-n> for further information.
+
+=item B<force>
+
+If an error is encounted during a multiple VM operation the default behaviour is to stop execution. If this setting is set to '1' this behaviour will be overridden and operations will continue even if an error is encounted.
 
 =item B<human>
 
@@ -559,6 +572,10 @@ Please report to https://github.com/hash-bang/VMM when found.
 Matt Carter <m@ttcarter.com>
 
 =cut
+# }}} POD
+
+package vmm;
+our $VERSION = '0.1.1';
 
 # Header {{{
 use Config::IniFiles;
@@ -601,14 +618,14 @@ sub pause {
 }
 
 sub error {
-	# FIXME: This function is pretty basic and needs a user-friendlyness upgrade
 	my $action = shift;
 	my $subject = shift;
 	if (ref($@) eq 'SoapFault') {
-		say(0, "An error occured: " . $@->detail);
+		say(0, "ERROR: " . $@->detail);
 	} else {
-		say(0, "General fault!");
+		say(0, "ERROR: General fault!");
 	}
+	fatal("Stopping execution. Use -f to force continue.") unless $force;
 }
 # }}} Flow control
 
@@ -871,6 +888,7 @@ our $cycleno = 0; # Offset of the object we are operating on
 our $dryrun = $cfg->val($profile, 'dryrun', 0);
 our $wait = $cfg->val($profile, 'wait', 0);
 our $human = $cfg->val($profile, 'human', '0');
+our $force = $cfg->val($profile, 'force', '0');
 my $priority = $cfg->val($profile, 'priority', 'low');
 my $seperator = $cfg->val($profile, 'seperator', "\t");
 my $title, $display, $pool, $datastore;
@@ -886,6 +904,7 @@ Util::connect();
 GetOptions(
 	# Global options
 	'dryrun|n' => \$dryrun,
+	'force|f' => \$force,
 	'verbose|v+' => \$verbose,
 	'wait|w=i' => \$wait,
 
@@ -926,7 +945,7 @@ if ($cmd eq 'clone') { # CLONE {{{
 		$poolref = $sourceref->resourcePool;
 	}
 	if ($datastore) { # User is specifying pattern of datastores
-		foreach (split(',', $datastore)) {
+		foreach (split('\s*,\s*', $datastore)) {
 			say(2, "Loading datastore '$_'");
 			my $dsref = getview('Datastore', $_) or fatal("Unknown datastore: '$_'");
 			push @dsrefs, $dsref;
@@ -935,7 +954,7 @@ if ($cmd eq 'clone') { # CLONE {{{
 		push @dsrefs, getview('Mor', $sourceref->datastore->[0]);
 	}
 
-	say(1, "Clone source $source (x $count clones, across " . scalar(@dsrefs) ." datastores)");
+	say(1, "Clone source $source (x $count clones, across " . scalar(@dsrefs) ." datastores)") if $count > 1;
 
 	while ($cycleno < $count) {
 		pause() if $cycleno++;
@@ -944,7 +963,7 @@ if ($cmd eq 'clone') { # CLONE {{{
 			$target++;
 		}
 
-		say(1, "Cloning $source -> $target (clone #$cycleno, DS " . $dsrefs[$dsno]->name . ")");
+		say(1, "Cloning $source -> $target (clone #$cycleno, DS = " . $dsrefs[$dsno]->name . ", Pool = " . $poolref->name  . " )");
 
 		eval {
 			$sourceref->CloneVM(
@@ -974,14 +993,13 @@ if ($cmd eq 'clone') { # CLONE {{{
 	my $displaytype = 0; # 0 - Plain list, 1 - CSV list, 2 - Perl string eval
 	if ($display =~ /\$/) { # Contains a '$' - assume Perl eval
 		$displaytype = 2;
-	} elsif ($display) {
-		@displaylist = split(',',$display); # Split 'display' CSV option
-		print Dumper(@displaylist);
+	} elsif ($display) { # Treat as CSV
+		@displaylist = split(',',$display);
 		$displaytype = 1;
 	}
 
 	if ($title) { # Output a title
-		$title =~ s/,/$seperator/g;
+		$title =~ s/\s*,\s*/$seperator/g;
 		say(0, $title);
 	}
 
@@ -1001,7 +1019,7 @@ if ($cmd eq 'clone') { # CLONE {{{
 			foreach $type (@displaylist) {
 				$line .= ($info{$type} ? $info{$type} : 'UNKNOWN') . $seperator;
 			}
-			$line = substr($line, 0, 0 - length($seperator)); # Stip last $seperator
+			$line = substr($line, 0, 0 - length($seperator)); # Strip last $seperator
 			print "$line\n";
 		}
 	} elsif ($displaytype == 2) { # Perl eval
@@ -1057,22 +1075,23 @@ if ($cmd eq 'clone') { # CLONE {{{
 	}
 # }}} HOST
 } elsif ($cmd eq 'migrate') { # MIGRATE {{{
-	my $poolref, $priorityref;
 	fatal("Invalid priority: '$priority'. Choose from: low, normal, high") unless $priority =~ /^low|normal|high$/;
-	my $priorityref = VirtualMachineMovePriority->new($priority);
+	my $priorityref = VirtualMachineMovePriority->new($priority) or fatal('Invalid internal priority state. Probably an issue with the VMware libraries');
 
 	my $targethost = pop;
 	fatal('No destination host specified') unless $targethost;
 
-	$poolref = getview('ResourcePool', $pool) or fatal("Invalid destination pool: $pool") if ($pool);
+	my $poolref = getview('ResourcePool', $pool) or fatal("Invalid destination pool: $pool") if ($pool);
 	my $targethostref = getview('HostSystem', $targethost) or fatal("Invalid destination host: $targethost");
 
 	my @vms = multiglob([list('VirtualMachine')], \@ARGV);
 	fatal('No VM\'s match the given pattern') unless scalar(@vms);
 
 	say(2, "Migrating to $targethost with $priority priority");
+	my $success; # Last operation worked
 	foreach $vm (@vms) {
-		pause() if $cycleno++;
+		pause() if $cycleno++ and $success;
+		$success = 0;
 		say(1, "Migrate $vm -> $targethost");
 
 		my $vmref = getview('VirtualMachine', $vm) or fatal("Invalid VM: $vm");
@@ -1086,29 +1105,37 @@ if ($cmd eq 'clone') { # CLONE {{{
 				state => $vm->runtime->powerState->val,
 			) unless $dryrun;
 		};
-		error('migrate', $vm, @_) if @_;
+		if (@_) { # Had errors
+			error('migrate', $vm, @_) ;
+			last unless $force;
+		} else {
+			$success = 1;
+		}
 	}
 # }}} MIGRATE
 } elsif ($cmd eq 'move') { # MOVE {{{
-	my $poolref, $success;
 	my $targetds = pop;
 	fatal('No destination datasore specified') unless $targetds;
 
 	my $targetdsref = getview('Datastore', $targetds) or fatal("Invalid destination datastore: $targetds");
 
-	$poolref = getview('ResourcePool', $pool) or fatal("Invalid destination pool: $pool") if ($pool);
+	my $poolref;
+	if ($pool) {
+		$poolref = getview('ResourcePool', $pool) or fatal("Invalid destination pool: $pool");
+	}
 
 	my @vms = multiglob([list('VirtualMachine')], \@ARGV);
 	fatal('No VM\'s match the given pattern') unless scalar(@vms);
 
-	say(2, "Moving to datastore '$targetds'");
+	say(2, "Moving " . scalar(@vms) . " VM's to datastore '$targetds'");
+
+	my $success; # Last operation worked
 	foreach $vm (@vms) {
 		pause() if $cycleno++ and $success;
 		$success = 0;
 		say(1, "Move $vm -> $targetds");
 
 		my $vmref = getview('VirtualMachine', $vm) or fatal("Invalid VM: $vm");
-		fatal("Invalid virtual machine: $vm") unless $vmref;
 		if (getview('Mor', $vmref->datastore->[0])->name eq $targetdsref->name) {
 			say(0, "$vm is already located in datastore '$targetds'");
 			next;
@@ -1124,8 +1151,12 @@ if ($cmd eq 'clone') { # CLONE {{{
 				pool => $vmpoolref,
 			)) unless $dryrun;
 		};
-		error('move', $vm, @_) if @_;
-		$success = 1;
+		if (@_) { # Had errors
+			error('move', $vm, @_);
+			last unless $force;
+		} else {
+			$success = 1;
+		}
 	}
 # }}} MOVE
 } elsif ($cmd eq 'state') { # STATE {{{
@@ -1135,13 +1166,16 @@ if ($cmd eq 'clone') { # CLONE {{{
 
 	my @vms = multiglob([list('VirtualMachine')], \@ARGV);
 	fatal('No VM\'s match the given pattern') unless scalar(@vms);
+	my $success;
 	foreach $vm (@vms) {
-		pause() if $cycleno++;
+		pause() if $cycleno++ and $success;
+		$success = 0;
 		my $vmref = getview('VirtualMachine', $vm) or fatal("Invalid virtual machine: $vm");
 		if ($state eq 'on') {
 			if ($vmref->runtime->powerState->val eq 'poweredOff') {
 				say(1, "Powering on $vm");
 				$vmref->PowerOnVM() unless $dryrun;
+				$success = 1;
 			} else {
 				say(0, "$vm needs to be powered off before it can be turned on (VMware recognises the power state as '" . $vm->runtime->powerState->val . "')!");
 			}
@@ -1151,21 +1185,27 @@ if ($cmd eq 'clone') { # CLONE {{{
 			} elsif ($state eq 'reboot') {
 				say(1, "Rebooting $vm");
 				$vmref->ResetVM() unless $dryrun;
+				$success = 1;
 			} elsif ($state eq 'suspend') {
 				say(1, "Suspending $vm");
 				$vmref->SuspendVM() unless $dryrun;
+				$success = 1;
 			} elsif ($state eq 'off') {
 				say(1, "Powering off $vm");
 				$vmref->PowerOffVM() unless $dryrun;
+				$success = 1;
 			} elsif ($state eq 'standby') {
 				say(1, "Standby $vm");
 				$vmref->StandbyGuest() unless $dryrun;
+				$success = 1;
 			} elsif ($state eq 'shutdown') {
 				say(1, "Shutting down $vm");
 				$vmref->ShutdownGuest() unless $dryrun;
+				$success = 1;
 			} elsif ($state eq 'restart') {
 				say(1, "Restarting $vm");
 				$vmref->RebootGuest() unless $dryrun;
+				$success = 1;
 			}
 		}
 	}
@@ -1178,10 +1218,11 @@ if ($cmd eq 'clone') { # CLONE {{{
 	fatal('You must specify what item to set. Choose from: cpu, mem, all') unless $item;
 	fatal('Invalid item selection. Choose from: cpu, mem, all') unless $item =~ /^cpu|mem|all$/;
 
-	my @pools = multiglob([list('ResourcePool')], \@ARGV);
-	fatal('No pools match the given pattern') unless scalar(@pools);
+	my @pools = multiglob([list('ResourcePool')], \@ARGV) or fatal('No pools match the given pattern');
+	my $success;
 	foreach $pool (@pools) {
-		pause() if $cycleno++;
+		pause() if $cycleno++ and $success;
+		$success = 0;
 		my $poolref = getview('ResourcePool', $pool);
 		fatal("Invalid resource pool: $pool") unless $poolref;
 
@@ -1199,12 +1240,13 @@ if ($cmd eq 'clone') { # CLONE {{{
 		}
 		my $config = ResourceConfigSpec->new(cpuAllocation=>$cpualloc, memoryAllocation=>$memalloc);
 		$poolref->UpdateConfig(config => $config) unless $dryrun;
+		$success = 1;
 	}
 # }}} SETPOOL
 } elsif ($cmd eq 'show') { # SHOW {{{
 	my $rawtype = $type = shift;
-	unless ($type = translate($type)) { # First arg is not a recognised type - assume the user is just listing VMs
-		unshift @ARGV, $rawtype; # Add back to pattern list
+	unless ($type = translate($type)) { # First arg is not a recognised type - assume the user ommitted the prefix 'vm'
+		unshift @ARGV, $rawtype; # Add the incorrect type back to pattern list
 		$type = 'VirtualMachine';
 		say(1, "No specific type requested. Assuming: 'vm'");
 	}
@@ -1217,10 +1259,10 @@ if ($cmd eq 'clone') { # CLONE {{{
 	}
 # }}} SHOW
 } elsif ($cmd eq 'snapshot') { # SNAPSHOT {{{
-	my $success;
-	my @vms = multiglob([list('VirtualMachine')], \@ARGV);
-	fatal('No VM\'s match the given pattern') unless scalar(@vms);
+	my @vms = multiglob([list('VirtualMachine')], \@ARGV) or fatal('No VM\'s match the given pattern');
 	$title = $title || time;
+
+	my $success;
 	foreach $vm (@vms) {
 		say(1, "Snapshot '$vm'");
 		pause() if $cycleno++ and $success;
@@ -1258,3 +1300,4 @@ __DATA__
 [GLOBAL]
 verbose = 1
 dryrun = 0
+force = 0

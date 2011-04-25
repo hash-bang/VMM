@@ -1,4 +1,4 @@
-VERSION := $(shell git describe --match 'v[0-9].[0-9]' --tags --long | grep -Eo 'v[0-9]+\.[0-9]+-[0-9]+' | tr - . | cut -c 2-)
+VERSION := $(shell perl -MExtUtils::MakeMaker -le 'print MM->parse_version(shift)' vmm)
 DEBFACTORY := DebFactory
 
 README: vmm
@@ -7,7 +7,7 @@ README: vmm
 	git commit -m 'Auto update from POD'
 
 commit: README
-	git commit -a
+	-git commit -a
 
 push: commit
 	git push
