@@ -1,0 +1,5 @@
+* Allow pattern ranges e.g. DB{10..20} DB{10,12,15}
+* Delete VM's
+* Set 'BIOS on next boot'
+* Attach / detatch CD-ROM drives
+* Upgrade VMware tools
