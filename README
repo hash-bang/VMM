@@ -38,8 +38,12 @@ COMMANDS
 
     list    Display a list of the given items matching a pattern.
 
-            Possible lists include (selection can be plural or singular): *
-            vms (default if unspecified) * datastores * hosts * pools
+            Possible lists include (selection can be plural or singular):
+
+                    vms (default if unspecified)
+                    datastores
+                    hosts
+                    pools
 
             If '-d' is specified without any containing '$' marks the string
             is evaluated as a CSV with each line extracting the requisite
@@ -145,6 +149,7 @@ OPTIONS
 
             Specify a data store for operations that require it.
 
+    --force
     -f
 
             Used during: All operations
@@ -152,9 +157,9 @@ OPTIONS
             Type: Switch
 
             Force continue if an error occurs. Normaly if an error occurs
-            vmm will stop processing any further VMs specified on the
-            command line. If this flag is enabled vmm will instead continue
-            operation as if no error occured.
+            vmm will stop processing any operations specified on the command
+            line. If this flag is enabled vmm will continue operation as if
+            no error occured.
 
     --human
     -h
@@ -291,6 +296,11 @@ EXAMPLES
     vmm state on DB00 DB01 -w 30
         Turn DB00 and DB01 on waiting 30 seconds between machines.
 
+    vmm state on DB00 DB01 -w 30 -f
+        Turn DB* VMs on. -f ensures that even if any of the machines fail to
+        turn on for any reason the remaining machines will still be sent the
+        'on' command.
+
 FILES
     /etc/vmmrc
             VMM config file for all users.
@@ -309,7 +319,10 @@ CONFIG
             profile = Cluster1
             dryrun = 0
             human = 1
+            force = 0
             seperator = \t
+            http_proxy = http://myproxy.example.com:8080
+            https_proxy = http://myproxy.example.com:8080
         
             [Cluster1]
             url = https://cluster1.acme.edu
@@ -338,6 +351,18 @@ CONFIG
             The authentication information when connecting to the vServer.
 
     dryrun  Specify a default dry run value. See -n for further information.
+
+    force   If an error is encounted during a multiple VM operation the
+            default behaviour is to stop execution. If this setting is set
+            to '1' this behaviour will be overridden and operations will
+            continue even if an error is encounted.
+
+    http_proxy
+    https_proxy
+            Forceably set the HTTP(s)_PROXY environment variable to the
+            provided value before connecting. This is included to assist
+            basic login shells where these variables are not imported
+            correctly.
 
     human   Always output numbers in a human readable format rather than the
             raw form.
