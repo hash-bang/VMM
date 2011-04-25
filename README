@@ -124,7 +124,7 @@ OPTIONS
             Perlish way. e.g.
 
             DBS1, DBS2, DBS3... DBS10 DB00, DB01, DB02... DB99 DBAA, DBAB,
-            DBAC,,, DBZZ
+            DBAC... DBZZ
 
     --display [col1,col2...]
     -d [col1,col2...]
