@@ -52,10 +52,11 @@ If a list of matches is provided, the data store list is filtered for those item
 Display a list of the given items matching a pattern.
 
 Possible lists include (selection can be plural or singular):
-* vms (default if unspecified)
-* datastores
-* hosts
-* pools
+
+	vms (default if unspecified)
+	datastores
+	hosts
+	pools
 
 If '-d' is specified without any containing '$' marks the string is evaluated as a CSV with each line extracting the requisite information that would be shown with the 'show' command. See the EXAMPLES section for further information.
 
@@ -90,13 +91,14 @@ If '-t' is specified, it is used as the title of the snapshot. Otherwise the cur
 Set the state of a list of VMs.
 
 This can be any of the following choices:
-* on - Power up the specified VMs
-* off - Power down the specified VMs. This is a hard power state so data loss could occur.
-* suspend - Power the machine into standby mode. This is a hard power state which does not rely on VMware tools.
-* restart - Hard power cycle the VMs. Like 'off' this is a forced power state so data loss could occur.
-* shutdown - Try shutting down the machine via VMware tools.
-* standby - Try to put the machine into the soft standby state.
-* reboot - Try shutting down the machine via VMware tools.
+
+	on - Power up the specified VMs
+	off - Power down the specified VMs. This is a hard power state so data loss could occur.
+	suspend - Power the machine into standby mode. This is a hard power state which does not rely on VMware tools.
+	restart - Hard power cycle the VMs. Like 'off' this is a forced power state so data loss could occur.
+	shutdown - Try shutting down the machine via VMware tools.
+	standby - Try to put the machine into the soft standby state.
+	reboot - Try shutting down the machine via VMware tools.
 
 =item B<version>
 
@@ -159,7 +161,7 @@ e.g.
 
 DBS1, DBS2, DBS3... DBS10
 DB00, DB01, DB02... DB99
-DBAA, DBAB, DBAC,,, DBZZ
+DBAA, DBAB, DBAC... DBZZ
 
 =item B<--display [col1,col2...]>
 
