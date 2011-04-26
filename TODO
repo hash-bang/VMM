@@ -1,5 +1,8 @@
 * Allow pattern ranges e.g. DB{10..20} DB{10,12,15}
-* Delete VM's
-* Set 'BIOS on next boot'
-* Attach / detatch CD-ROM drives
-* Upgrade VMware tools
+
+Future commands
+* Template, Untemplate
+* Delete
+* Bios (Sets the 'bios on next boot' flag)
+* AttachCD (Sets an ISO to the VM's CD-ROM drive)
+* ToolsUpgrade (Upgrade VMware tools)
