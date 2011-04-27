@@ -906,11 +906,11 @@ my $title, $display, $pool, $datastore;
 my $count = 1;
 
 if (my $_ = $cfg->val($profile, 'http_proxy')) {
-	say(1, "Forceably importing HTTP_PROXY as '$_'");
+	say(2, "Forceably importing HTTP_PROXY as '$_'");
 	$ENV{HTTP_PROXY} = $_;
 }
 if (my $_ = $cfg->val($profile, 'https_proxy')) {
-	say(1, "Forceably importing HTTPS_PROXY as '$_'");
+	say(2, "Forceably importing HTTPS_PROXY as '$_'");
 	$ENV{HTTPS_PROXY} = $_;
 }
 
