@@ -600,7 +600,7 @@ Getopt::Long::Configure('bundling', 'ignorecase_always', 'pass_through');
 STDERR->autoflush(1); # } Flush the output DIRECTLY to the output buffer without caching
 STDOUT->autoflush(1); # }
 
-use Data::Dumper; # FIXME: Debugging modules
+use Data::Dump; # FIXME: Debugging modules
 # }}} Header
 
 # Functions {{{
