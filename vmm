@@ -984,7 +984,7 @@ if ($cmd eq 'clone') { # CLONE {{{
 			$target++;
 		}
 
-		say(1, "Cloning $source -> $target (clone #$cycleno, DS = " . $dsrefs[$dsno]->name . ", Pool = " . $poolref->name  . " )");
+		say(1, "Cloning $source -> $target (clone #$cycleno, DS = " . $dsrefs[$dsno]->name . ")");
 
 		eval {
 			$sourceref->CloneVM(
