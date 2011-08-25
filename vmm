@@ -16,10 +16,11 @@ vmm - Manage VMware virtual machines
 
 =item B<Command specific syntax:>
 
-	vmm clone [-o pool] [-c count] [-a datastore...] <source vm> <new vm name>
+	vmm clone [-o pool] [-c count] [-a datastore...] [-l folder] <source vm> <new vm name>
+	vmm deploy [synonym of 'clone']
 	vmm df [-h] [datastore...]
 	vmm host [maintenance|restore|restart|shutdown|disconnect|reconnect] <hosts...>
-	vmm list [-d col1,col2... | perl string] [-t title] [vms|datastores|hosts|pool] [patterns...]
+	vmm list [-d col1,col2... | perl string] [-t title] [vm|datastore|host|pool|template][s] [patterns...]
 	vmm migrate [-p low|normal|high] [-o pool] <vms...> <host>
 	vmm move [-o pool] <vms...> <datastore>
 	vmm setpool <low|normal|high> <cpu|mem|all> <pools...>
@@ -36,11 +37,15 @@ vmm - Manage VMware virtual machines
 
 =item B<clone>
 
-Clone a given VM to another VM name.
+Clone a given VM or template to another VM name.
 If -c is specified multiple copies are made. Each VM name will be incremented in the usual Perlish way. e.g.: DB1, DB2, DB3 etc.
 
 If -a is unspcified the datastore of the source VM is copied as the new clones datastore.
 If -a is specified the data store will be set during cloning. If -a contains a comma denoted list the datastores will be alternated during cloning. e.g. -a 1,2 copies to datastore 1 then 2 then starts again at 1. Patterns of repeating datastores can be specified - e.g. '-a 1,2,3,2,1'.
+
+=item B<deploy>
+
+Synonym of 'clone'.
 
 =item B<df>
 
@@ -265,6 +270,25 @@ Switch
 Dry run mode.
 When enabled vmm will continue as normal but no actual call to the VMware VServer is made.
 
+=item B<--folder>
+
+=item B<-l>
+
+=over
+
+=item B<Used during:>
+clone
+
+=item B<Default:>
+Source VM / templates folder
+
+=item B<Type:>
+String
+
+=back
+
+Specifies the folder that the cloned machine should be moved into. If unspecified the source VM's folder is used instead.
+
 =item B<--pool [pool]>
 
 =item B<-o [pool]>
@@ -403,6 +427,14 @@ Since neither the datasource (-d) or pool (-o) is specified these details are co
 =item B<vmm clone DB00 DB01 -c 30 -d SAN1,SAN2 -o Active>
 
 Same as the above example but spread the datastores across SAN1 and SAN2 and move the machine to the 'Active' pool.
+
+=item B<vmm deploy Template-DBServer DB05 -l Databases>
+
+Deploys the template Template-DBServer into DB05, moving the destination into the Databases folder.
+
+=item B<vmm clone Template-DBServer DB05 -l Databases>
+
+This is exactly the same as above. A clone and deploy operations will automatically figure out if the source is a template and act accordingly.
 
 =item B<vmm df *2>
 
@@ -586,7 +618,7 @@ Matt Carter <m@ttcarter.com>
 # }}} POD
 
 package vmm;
-our $VERSION = '0.1.1';
+our $VERSION = '0.2.0';
 
 # Header {{{
 use Config::IniFiles;
@@ -651,7 +683,7 @@ sub list {
 			$_ = $_->name;
 		}
 	} @{Vim::find_entity_views (
-		view_type => $type,
+		view_type => ($type == 'Template' ? 'VirtualMachine' : $type), # Template is really just VirtualMachine with the above extra work
 		begin_entity => Vim::get_service_content()->rootFolder,
 		filter => {},
 	)};
@@ -685,9 +717,10 @@ sub multiglob {
 # Info grabbers {{{
 sub translate {
 	my $type = shift;
-	$type =~ s/s$//; # Correct plurals -> singular
+	$type =~ s/s$//; # Translate plurals in singulars
 	my %translate = qw/
 		vm		VirtualMachine
+		template	Template
 		host		HostSystem
 		datastore	Datastore
 		d		Datastore
@@ -700,7 +733,7 @@ sub translate {
 sub getview {
 	# Return a VMware view object from its type and reference
 	# This function also supports the meta type 'Mor' which looks up the view by the managed object reference
-	my $type = shift; # HostSystem, VirtualMachine, ResourcePool
+	my $type = shift; # HostSystem, VirtualMachine, ResourcePool, Folder
 	my $ref = shift;
 	if ($type eq 'Mor') {
 		return Vim::get_view(
@@ -718,7 +751,7 @@ sub getinfo {
 	# Generic function to return information from one of the below get<type>info functions
 	my $type = shift;
 	my $name = shift;
-	if ($type eq 'VirtualMachine') {
+	if ($type =~ /^VirtualMachine|Template$/) {
 		return getvminfo($name);
 	} elsif ($type eq 'Datastore') {
 		return getdsinfo($name);
@@ -729,16 +762,21 @@ sub getinfo {
 	}
 }
 
+sub istemplate {
+	# This view is a template machine ?
+	my $view = shift;
+	return $view->summary->config->template eq '0' ? 0 : 1;
+}
+
 sub getvminfo {
 	my $vm = shift;
 	my $view = getview('VirtualMachine', $vm) or fatal("Unknown VM: '$vm'");
+	my $template = istemplate($view);
 	my %info = (
 		name => $view->name,
-		template => $view->summary->config->template eq '0' ? 'none' : $view->summary->config->template,
+		template => $template,
 		os => $view->summary->guest->guestFullName,
 		datastore => Vim::get_view(mo_ref => ${$view->datastore}[0])->name,
-		pool => Vim::get_view(mo_ref => $view->resourcePool)->name,
-		booted => $view->runtime->bootTime,
 		alloccpu => $view->summary->config->numCpu,
 		allocmem => $view->summary->config->memorySizeMB,
 		allocdisks => $view->summary->config->numVirtualDisks,
@@ -747,10 +785,15 @@ sub getvminfo {
 		host => Vim::get_view(mo_ref => $view->runtime->host)->name,
 		state => $view->runtime->powerState->val eq 'poweredOn' ? 'on' : 'off',
 		tools => $view->guest->toolsStatus->val eq 'toolsOk' ? 'yes' : 'no',
-		folder => $view->parent->name,
+		folder => Vim::get_view(mo_ref => $view->parent)->name,
 		ip => 'UNKNOWN',
 		mac => 'UNKNOWN',
 	);
+
+	if (!$template) { # Only grab the following if its not a template machine
+		$info{pool} = Vim::get_view(mo_ref => $view->resourcePool)->name;
+		$info{booted} => $view->runtime->bootTime;
+	}
 
 	if ($view->guest->disk) {
 		foreach (@{$view->guest->disk}) {
@@ -902,7 +945,7 @@ our $human = $cfg->val($profile, 'human', '0');
 our $force = $cfg->val($profile, 'force', '0');
 my $priority = $cfg->val($profile, 'priority', 'low');
 my $seperator = $cfg->val($profile, 'seperator', "\t");
-my $title, $display, $pool, $datastore;
+my $title, $display, $pool, $datastore, $folder;
 my $count = 1;
 
 if (my $_ = $cfg->val($profile, 'http_proxy')) {
@@ -938,6 +981,7 @@ GetOptions(
 	'seperator|s=s' => \$seperator,
 	'title|t=s' => \$title,
 	'datastore|ds|a=s' => \$datastore,
+	'folder|l=s' => \$folder,
 );
 
 my $cmd = shift; # Extract what command we should work with
@@ -950,12 +994,13 @@ if ($cmd eq 'df') { # DF {{{
 	$title = 'Name,Size,Used,Free,%';
 	unshift @ARGV, 'datastore';
 } # }}}
-if ($cmd eq 'clone') { # CLONE {{{
+if ($cmd =~ /^clone|deploy$/) { # CLONE / DEPLOY {{{
 	my $poolref;
+	my $folderref;
 
 	my $source = shift;
 	my $target = shift;
-	my $sourceref = getview('VirtualMachine', $source) or fatal("Invalid source VM: '$source'");
+	my $sourceref = getview('VirtualMachine', $source) or fatal("Invalid source VM / template: '$source'");
 	my $sourcehost = getview('Mor', $sourceref->runtime->host) or fatal("Invalid host for VM '$source'");
 	my @dsrefs;
 
@@ -963,8 +1008,16 @@ if ($cmd eq 'clone') { # CLONE {{{
 		say(2, "Using pool '$pool'");
 		$poolref = getview('ResourcePool', $pool) or fatal("Invalid destination pool: $pool");
 	} else { # Copy pool from source
-		$poolref = $sourceref->resourcePool;
+		$poolref = getview('Mor', $sourceref->resourcePool);
 	}
+
+	if ($folder) { # Requesting a specific folder
+		say(2, "Using folder '$folder'");
+		$folderref = getview('Folder', $folder) or fatal("Invalid destination folder: $folder");
+	} else { # Copy folder from source
+		$folderref = $sourceref->parent;
+	}
+
 	if ($datastore) { # User is specifying pattern of datastores
 		foreach (split('\s*,\s*', $datastore)) {
 			say(2, "Loading datastore '$_'");
@@ -975,7 +1028,7 @@ if ($cmd eq 'clone') { # CLONE {{{
 		push @dsrefs, getview('Mor', $sourceref->datastore->[0]);
 	}
 
-	say(1, "Clone source $source (x $count clones, across " . scalar(@dsrefs) ." datastores)") if $count > 1;
+	say(1, "Clone source $source ($count clones, across " . scalar(@dsrefs) ." datastores)") if $count > 1;
 
 	while ($cycleno < $count) {
 		pause() if $cycleno++;
@@ -984,11 +1037,11 @@ if ($cmd eq 'clone') { # CLONE {{{
 			$target++;
 		}
 
-		say(1, "Cloning $source -> $target (clone #$cycleno, DS = " . $dsrefs[$dsno]->name . ")");
+		say(1, "Cloning $source -> $target (clone #$cycleno, Pool = " . $poolref->name . ", DS = " . $dsrefs[$dsno]->name . ", Folder = " . $folderref->name . ")");
 
 		eval {
 			$sourceref->CloneVM(
-				folder => $sourceref->parent,
+				folder => $folderref,
 				name => $target,
 				spec => VirtualMachineCloneSpec->new(
 					powerOn => 0,
@@ -1273,6 +1326,7 @@ if ($cmd eq 'clone') { # CLONE {{{
 	}
 
 	my @items = multiglob([list($type)], \@ARGV);
+	fatal("No matching items found") unless @items;
 	foreach $item (@items) {
 		my %info = getinfo($type, $item);
 		print "$key = $val\n" while (($key, $val) = each %info);
