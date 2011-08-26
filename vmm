@@ -683,7 +683,7 @@ sub list {
 			$_ = $_->name;
 		}
 	} @{Vim::find_entity_views (
-		view_type => ($type == 'Template' ? 'VirtualMachine' : $type), # Template is really just VirtualMachine with the above extra work
+		view_type => ($type eq 'Template' ? 'VirtualMachine' : $type), # Template is really just VirtualMachine with the above extra work
 		begin_entity => Vim::get_service_content()->rootFolder,
 		filter => {},
 	)};
