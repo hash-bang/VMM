@@ -1008,6 +1008,7 @@ if ($cmd =~ /^clone|deploy$/) { # CLONE / DEPLOY {{{
 		say(2, "Using pool '$pool'");
 		$poolref = getview('ResourcePool', $pool) or fatal("Invalid destination pool: $pool");
 	} else { # Copy pool from source
+		fatal("Cannot determine pool when deploying from a template. You must specify the pool with -o") if istemplate($sourceref);
 		$poolref = getview('Mor', $sourceref->resourcePool);
 	}
 
